@@ -1,0 +1,9 @@
+pyhelayers
+pandas
+numpy 
+tensorflow
+tensorflow[and-cuda]
+flwr
+flwr[simulation]
+flwr-datasets
+flwr_datasets[vision]
