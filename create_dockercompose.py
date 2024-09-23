@@ -56,6 +56,45 @@ def add_client_info(cid, nclients, solution, dataset, niid, alpha):
 
     return client_str
 
+
+def add_prometheus_grafana_cadvisor():
+    prometheus_str = "  cadvisor:\n\
+    image: google/cadvisor:latest\n\
+    container_name: cadvisor\n\
+    ports:\n\
+      - 8080:8080\n\
+    volumes:\n\
+      - /:/rootfs:ro\n\
+      - /var/run:/var/run:ro\n\
+      - /sys:/sys:ro\n\
+      - /var/lib/docker/:/var/lib/docker:ro\n\
+    restart: unless-stopped\n\
+    \n\
+  prometheus:\n\
+    image: prom/prometheus:latest\n\
+    container_name: prometheus\n\
+    volumes:\n\
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml\n\
+    ports:\n\
+      - 9090:9090\n\
+    restart: unless-stopped\n\
+    \n\
+  grafana:\n\
+    image: grafana/grafana:latest\n\
+    container_name: grafana\n\
+    ports:\n\
+      - 3000:3000\n\
+    volumes:\n\
+      - grafana-storage:/var/lib/grafana\n\
+    environment:\n\
+      - GF_SECURITY_ADMIN_PASSWORD=admin # Defina a senha do Grafana\n\
+    restart: unless-stopped\n\
+    \n\
+    "
+
+    return prometheus_str
+
+
 def main():
 
     parser = OptionParser()
@@ -84,6 +123,9 @@ def main():
             client_str = add_client_info(cid, opt.clients, opt.solution, opt.dataset, opt.niid, opt.dirichilet)    
 
             dockercompose_file.write(client_str)
+            
+        prometheus_str = add_prometheus_grafana_cadvisor()
+        dockercompose_file.write(prometheus_str)
 
 if __name__ == '__main__':
 	main()
