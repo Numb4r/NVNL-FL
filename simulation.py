@@ -12,7 +12,7 @@ FRACTION_FIT    = 1.0
 
 def create_client(cid):
         client = HEClient(cid, NIID, DATASET, NCLIENTS, DIRICHLET_ALPHA)
-        return client.to_client()
+        return client#.to_client()
 
 class HESimulation():
     def __init__(self):

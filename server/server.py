@@ -5,6 +5,8 @@ from flwr.server.strategy.aggregate import aggregate ,weighted_loss_avg
 import pickle
 import tenseal as ts
 import os
+import numpy as np
+from functools import reduce
 import logging
 logging.basicConfig(level=logging.DEBUG)
 
@@ -55,22 +57,44 @@ class HEServer(fl.server.strategy.FedAvg):
 
     def aggregate_fit(self, server_round, results, failures):		
         weights_results = []
-        agg_parameters = 0
-        total_samples  = 0 
+        agg_parameters  = 0
+        parameters_list = []
+        total_examples  = 0 
         
         for _, fit_res in results:
             client_id      = str(fit_res.metrics['cid'])
             parameters     = ts.ckks_tensor_from(self.context, fit_res.metrics['he']) 
-            parameters     *= int(fit_res.num_examples)
-            # parameters.rescale_()
-            agg_parameters += parameters
-            total_samples  += int(fit_res.num_examples)
+            parameters_list.append((parameters, int(fit_res.num_examples)))
+            total_examples  += int(fit_res.num_examples)
             
-            
-        agg_parameters      *= float(1.0/total_samples)
+        for parameters, num_examples in parameters_list:
+            weights         = num_examples / total_examples
+            agg_parameters  = agg_parameters + (parameters * weights)
+
+        
         self.agg_parameters = agg_parameters.serialize()
 
         return [], {}
+    
+    def aggregate(self, results):
+        """Compute weighted average."""
+        # Calculate the total number of examples used during training
+        num_examples_total = sum([num_examples for _, num_examples in results])
+
+        # Precompute the multiplicative inverse of num_examples_total
+        inverse_num_examples_total = 1.0 / num_examples_total
+
+        # Create a list of weights, each multiplied by the related number of examples
+        weighted_weights = [
+            [layer * num_examples for layer in weights] for weights, num_examples in results
+        ]
+
+        # Compute average weights of each layer using multiplication instead of division
+        weights_prime = [
+            reduce(np.add, layer_updates) * inverse_num_examples_total
+            for layer_updates in zip(*weighted_weights)
+        ]
+        return weights_prime
     
     def aggregate_evaluate(self, server_round, results, failures):
         """Aggregate evaluation losses using weighted average."""

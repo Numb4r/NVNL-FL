@@ -14,13 +14,13 @@ def context():
         ts.SCHEME_TYPE.CKKS,
         poly_modulus_degree=8192,
         # This means that the coefficient modulus will contain 4 primes of 60 bits, 40 bits, 40 bits, and 60 bits.
-        # coeff_mod_bit_sizes=[60, 40, 40, 60]
-        coeff_mod_bit_sizes=[40, 21, 21, 40]
+        coeff_mod_bit_sizes=[60, 40, 40, 60]
+        # coeff_mod_bit_sizes=[40, 21, 21, 40]
     )
 
-    #cont.generate_galois_keys()  # You can create the Galois keys by calling generate_galois_keys
-    cont.generate_relin_keys()
-    cont.global_scale = 2 ** 30  # global_scale: the scaling factor, here set to 2**40 (same that pow(2, 40))
+    cont.generate_galois_keys()  # You can create the Galois keys by calling generate_galois_keys
+    # cont.generate_relin_keys()
+    cont.global_scale = 2 ** 40  # global_scale: the scaling factor, here set to 2**40 (same that pow(2, 40))
     return cont
 
 def read_query(file_path):

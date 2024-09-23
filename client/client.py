@@ -97,7 +97,7 @@ class HEClient(fl.client.NumPyClient):
             temp_flat.extend(decrypted_parameters)
             
             reshaped_parameters  = self.reshape_parameters(temp_flat)
-            self.model.set_weights(local_parameters)
+            self.model.set_weights(reshaped_parameters)
 
         #parameters_decoded = self.encoder.decrypt_decode_double(parameters)
         # self.model.set_weights(self.last_parameters)
@@ -132,7 +132,7 @@ class HEClient(fl.client.NumPyClient):
             temp_flat.extend(decrypted_parameters)
             
             reshaped_parameters  = self.reshape_parameters(temp_flat)
-            self.model.set_weights(local_parameters)
+            self.model.set_weights(reshaped_parameters)
 
         loss, acc = self.model.evaluate(self.x_test, self.y_test)
 
