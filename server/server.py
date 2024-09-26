@@ -12,6 +12,23 @@ logging.basicConfig(level=logging.DEBUG)
 
 import random
 
+from pathlib import Path
+
+LOG_DIR = "logs/"
+
+
+def get_latest_created_folder(directory):
+    # Lista todos os diretórios dentro do caminho especificado
+    folders = [f for f in Path(directory).iterdir() if f.is_dir()]
+    
+    # Se houver diretórios, ordene-os pela data de criação (metadata de criação - st_ctime)
+    if folders:
+        latest_folder = max(folders, key=lambda f: f.stat().st_ctime)
+        return latest_folder
+    else:
+        return None
+
+
 
 class HEServer(fl.server.strategy.FedAvg):
     def __init__(self, num_clients, dirichlet_alpha, dataset, fraction_fit=1.0):
@@ -20,6 +37,8 @@ class HEServer(fl.server.strategy.FedAvg):
         self.dataset         = dataset
         self.context         = self.get_server_context()
         self.agg_parameters  = []
+        self.log_folder = get_latest_created_folder(LOG_DIR)
+
  
         super().__init__(fraction_fit=fraction_fit, min_available_clients=num_clients, 
                          min_fit_clients=num_clients, min_evaluate_clients=num_clients)
@@ -76,25 +95,25 @@ class HEServer(fl.server.strategy.FedAvg):
 
         return [], {}
     
-    def aggregate(self, results):
-        """Compute weighted average."""
-        # Calculate the total number of examples used during training
-        num_examples_total = sum([num_examples for _, num_examples in results])
+    # def aggregate(self, results):
+    #     """Compute weighted average."""
+    #     # Calculate the total number of examples used during training
+    #     num_examples_total = sum([num_examples for _, num_examples in results])
 
-        # Precompute the multiplicative inverse of num_examples_total
-        inverse_num_examples_total = 1.0 / num_examples_total
+    #     # Precompute the multiplicative inverse of num_examples_total
+    #     inverse_num_examples_total = 1.0 / num_examples_total
 
-        # Create a list of weights, each multiplied by the related number of examples
-        weighted_weights = [
-            [layer * num_examples for layer in weights] for weights, num_examples in results
-        ]
+    #     # Create a list of weights, each multiplied by the related number of examples
+    #     weighted_weights = [
+    #         [layer * num_examples for layer in weights] for weights, num_examples in results
+    #     ]
 
-        # Compute average weights of each layer using multiplication instead of division
-        weights_prime = [
-            reduce(np.add, layer_updates) * inverse_num_examples_total
-            for layer_updates in zip(*weighted_weights)
-        ]
-        return weights_prime
+    #     # Compute average weights of each layer using multiplication instead of division
+    #     weights_prime = [
+    #         reduce(np.add, layer_updates) * inverse_num_examples_total
+    #         for layer_updates in zip(*weighted_weights)
+    #     ]
+    #     return weights_prime
     
     def aggregate_evaluate(self, server_round, results, failures):
         """Aggregate evaluation losses using weighted average."""
@@ -119,6 +138,8 @@ class HEServer(fl.server.strategy.FedAvg):
         )
 
         print(f"Round {server_round} aggregated loss: {loss_aggregated} aggregated accuracy: {sum(accuracies)/len(accuracies)}")
+        with open(f'{self.log_folder}/server_evaluate.csv', 'a') as f:
+            f.write(f"{sum(accuracies)/len(accuracies)},{loss_aggregated}\n")
 
         return loss_aggregated, {}
     
