@@ -7,12 +7,33 @@ import os
 import random
 import tenseal as ts
 import pickle
-# import logging
+import numpy as np
 # logging.basicConfig(level=logging.DEBUG)
+
+# import logging
+
+from pathlib import Path
+
+LOG_DIR = "logs/"
+
+
+def get_latest_created_folder(directory):
+    # Lista todos os diretórios dentro do caminho especificado
+    folders = [f for f in Path(directory).iterdir() if f.is_dir()]
+    
+    # Se houver diretórios, ordene-os pela data de criação (metadata de criação - st_ctime)
+    if folders:
+        latest_folder = max(folders, key=lambda f: f.stat().st_ctime)
+        return latest_folder
+    else:
+        return None
+
 
 class HEClient(fl.client.NumPyClient):
     def __init__(self, cid, niid, dataset, num_clients, dirichlet_alpha):
         
+        self.NOT_ENCRYPTED_LAYERS = 12
+        self.log_folder = get_latest_created_folder(LOG_DIR)
         self.cid             = int(cid)
         self.dataset         = dataset
         self.niid            = niid
@@ -92,7 +113,7 @@ class HEClient(fl.client.NumPyClient):
         if len(config['he']) > 0:
             he_parameters        = ts.ckks_tensor_from(self.context, config['he'])
             local_parameters     = self.model.get_weights()
-            temp_flat            = self.flat_parameters(local_parameters[:2])
+            temp_flat            = self.flat_parameters(local_parameters[:self.NOT_ENCRYPTED_LAYERS])
             decrypted_parameters = he_parameters.decrypt().raw
             temp_flat.extend(decrypted_parameters)
             
@@ -108,18 +129,21 @@ class HEClient(fl.client.NumPyClient):
 
         
         trained_parameters = self.model.get_weights()
-        flat_parameters    = self.flat_parameters(trained_parameters[2:])
+        flat_parameters    = self.flat_parameters(trained_parameters[self.NOT_ENCRYPTED_LAYERS:])
         # he_parameters      = ts.ckks_tensor(client_context, trained_parameters[-1]) 
         he_parameters      = ts.ckks_tensor(self.context, flat_parameters) 
+        serialized = he_parameters.serialize()
 
         fit_msg = {
             'cid'     : self.cid,
             'accuracy': acc,
             'loss'    : loss,
-            'he'      : he_parameters.serialize()
+            'he'      : serialized
         }
-
-        return self.flat_parameters(trained_parameters[:2]), len(self.x_train), fit_msg
+        print(f'{len(trained_parameters[self.NOT_ENCRYPTED_LAYERS:])}')
+        with open(f'{self.log_folder}/client_{self.cid}_train.csv', 'a') as f:
+            f.write(f"{acc},{loss},{len(flat_parameters)},{len(serialized)} \n")
+        return self.flat_parameters(trained_parameters[:self.NOT_ENCRYPTED_LAYERS]), len(self.x_train), fit_msg
 
     def evaluate(self, parameters, config):
         client_context = self.get_client_context()
@@ -127,7 +151,7 @@ class HEClient(fl.client.NumPyClient):
         if len(config['he']) > 0:
             he_parameters        = ts.ckks_tensor_from(client_context, config['he'])
             local_parameters     = self.model.get_weights()
-            temp_flat            = self.flat_parameters(local_parameters[:2])
+            temp_flat            = self.flat_parameters(local_parameters[:self.NOT_ENCRYPTED_LAYERS])
             decrypted_parameters = he_parameters.decrypt().raw
             temp_flat.extend(decrypted_parameters)
             
@@ -141,6 +165,9 @@ class HEClient(fl.client.NumPyClient):
             'accuracy': acc,
             'loss'    : loss
         }
+        with open(f'{self.log_folder}/client_{self.cid}_eval.csv', 'a') as f:
+            f.write(f"{acc},{loss}\n")
+
 
         return loss, len(self.x_test), eval_msg
     
