@@ -38,6 +38,7 @@ class HEServer(fl.server.strategy.FedAvg):
         self.context         = self.get_server_context()
         self.agg_parameters  = []
         self.log_folder = get_latest_created_folder(LOG_DIR)
+        self.total_samples = 0
 
  
         super().__init__(fraction_fit=fraction_fit, min_available_clients=num_clients, 
@@ -58,6 +59,7 @@ class HEServer(fl.server.strategy.FedAvg):
         
         config = {
             'he': data2send,
+            'total_samples': self.total_samples
         }
         
         fit_ins = FitIns(parameters, config)
@@ -85,15 +87,16 @@ class HEServer(fl.server.strategy.FedAvg):
             parameters     = ts.ckks_tensor_from(self.context, fit_res.metrics['he']) 
             parameters_list.append((parameters, int(fit_res.num_examples)))
             total_examples  += int(fit_res.num_examples)
-            
+        self.total_samples = total_examples
         for parameters, num_examples in parameters_list:
-            weights         = num_examples / total_examples
-            agg_parameters  = agg_parameters + (parameters * weights)
+            # weights         += num_examples / total_examples
+            # agg_parameters  = agg_parameters + (parameters * weights)
+            agg_parameters  = agg_parameters + parameters 
 
         
         self.agg_parameters = agg_parameters.serialize()
 
-        return [], {}
+        return [], {'total_samples':total_examples}
     
     # def aggregate(self, results):
     #     """Compute weighted average."""

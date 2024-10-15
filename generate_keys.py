@@ -11,12 +11,18 @@ def context():
     :return: the context of the homomorphic encryption
     """
     cont = ts.context(
-        ts.SCHEME_TYPE.CKKS,
-        poly_modulus_degree=8192,
-        # This means that the coefficient modulus will contain 4 primes of 60 bits, 40 bits, 40 bits, and 60 bits.
-        coeff_mod_bit_sizes=[60, 40, 40, 60]
-        # coeff_mod_bit_sizes=[40, 21, 21, 40]
+        scheme=ts.SCHEME_TYPE.CKKS,  # Esquema CKKS: eficiente para operações numéricas
+        poly_modulus_degree=8192,  # Parâmetro de polinômio (trade-off entre segurança e performance)
+        coeff_mod_bit_sizes=[40, 20, 20]  # Bits reduzidos = menos operações permitidas
     )
+    # cont = ts.context(
+    #     ts.SCHEME_TYPE.CKKS,
+    #     poly_modulus_degree=16384,  # Aumenta o tamanho do polinômio para suportar mais operações
+    ##     poly_modulus_degree=8192,
+    #     # This means that the coefficient modulus will contain 4 primes of 60 bits, 40 bits, 40 bits, and 60 bits.
+    #     coeff_mod_bit_sizes=[60, 40, 40, 60]
+    #     # coeff_mod_bit_sizes=[40, 21, 21, 40]
+    # )
 
     cont.generate_galois_keys()  # You can create the Galois keys by calling generate_galois_keys
     # cont.generate_relin_keys()
