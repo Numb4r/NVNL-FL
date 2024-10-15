@@ -163,6 +163,10 @@ class HEClient(fl.client.NumPyClient):
             decrypted_parameters = he_parameters.decrypt().raw
             temp_flat.extend(decrypted_parameters)
             
+            temp_flat = np.array(temp_flat)
+            total_samples = config['total_samples']
+            temp_flat /= total_samples
+            
             reshaped_parameters  = self.reshape_parameters(temp_flat)
             self.model.set_weights(reshaped_parameters)
 

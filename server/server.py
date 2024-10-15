@@ -89,7 +89,7 @@ class HEServer(fl.server.strategy.FedAvg):
             total_examples  += int(fit_res.num_examples)
         self.total_samples = total_examples
         for parameters, num_examples in parameters_list:
-            # weights         += num_examples / total_examples
+            # weights         = num_examples / total_examples
             # agg_parameters  = agg_parameters + (parameters * weights)
             agg_parameters  = agg_parameters + parameters 
 
@@ -154,6 +154,7 @@ class HEServer(fl.server.strategy.FedAvg):
         # Parameters and config
         config = {
             'he': self.agg_parameters,
+            'total_samples':self.total_samples
         }  # {"server_round": server_round, "local_epochs": 1}
 
         evaluate_ins = EvaluateIns(parameters, config)
