@@ -111,14 +111,16 @@ class HEClient(fl.client.NumPyClient):
         print(f"Client {self.cid} - {len(self.x_train)} - {config['total_samples']} ")
         
         if len(config['he']) > 0:
+            total_samples = config['total_samples']
             he_parameters        = ts.ckks_tensor_from(self.context, config['he'])
             local_parameters     = self.model.get_weights()
             temp_flat            = self.flat_parameters(local_parameters[:self.NOT_ENCRYPTED_LAYERS])
             decrypted_parameters = he_parameters.decrypt().raw
+            decrypted_parameters = np.array(decrypted_parameters)
+            decrypted_parameters /= total_samples
             temp_flat.extend(decrypted_parameters)
-            temp_flat = np.array(temp_flat)
-            total_samples = config['total_samples']
-            temp_flat /= total_samples
+            # temp_flat = np.array(temp_flat)
+            # temp_flat /= total_samples
             
             reshaped_parameters  = self.reshape_parameters(temp_flat)
             self.model.set_weights(reshaped_parameters)
@@ -158,14 +160,15 @@ class HEClient(fl.client.NumPyClient):
         
         if len(config['he']) > 0:
             he_parameters        = ts.ckks_tensor_from(client_context, config['he'])
+            total_samples = config['total_samples']
             local_parameters     = self.model.get_weights()
             temp_flat            = self.flat_parameters(local_parameters[:self.NOT_ENCRYPTED_LAYERS])
             decrypted_parameters = he_parameters.decrypt().raw
+            decrypted_parameters = np.array(decrypted_parameters)
+            decrypted_parameters /= total_samples
             temp_flat.extend(decrypted_parameters)
             
-            temp_flat = np.array(temp_flat)
-            total_samples = config['total_samples']
-            temp_flat /= total_samples
+            
             
             reshaped_parameters  = self.reshape_parameters(temp_flat)
             self.model.set_weights(reshaped_parameters)
