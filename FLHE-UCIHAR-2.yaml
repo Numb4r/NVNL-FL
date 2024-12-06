@@ -1,0 +1,80 @@
+version: '3'
+services:
+
+  server:
+    image: 'allanmsouza/flhe:server'
+    container_name: fl_server
+    environment:
+      - SERVER_IP=0.0.0.0:9999
+      - NCLIENTS=2
+      - NUM_ROUNDS=50
+      - SOLUTION_NAME=FLHE
+      - DATASET=UCIHAR
+      - FRAC_FIT=0.2
+      - DIRICHLET_ALPHA=1
+      - HOMOMORPHIC=True
+    volumes:
+      - ./server:/server:r
+      - ./context:/context:r
+      - ./logs:/logs
+    networks:
+      - default
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role==manager
+    
+
+  client-0:
+    image: 'allanmsouza/flhe:client'
+    environment:
+      - SERVER_IP=fl_server:9999
+      - CID=0
+      - SOLUTION_NAME=FLHE
+      - DATASET=UCIHAR
+      - NIID=False
+      - NCLIENTS=2
+      - DIRICHLET_ALPHA=1
+      - START2SHARE=-2
+      - HOMOMORPHIC=True
+      - HOMOMORPHIC_TYPE=Full
+    volumes:
+      - ./client:/client:r
+      - ./context:/context:r
+      - ./logs:/logs
+    networks:
+      - default
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role==worker
+          
+
+  client-1:
+    image: 'allanmsouza/flhe:client'
+    environment:
+      - SERVER_IP=fl_server:9999
+      - CID=1
+      - SOLUTION_NAME=FLHE
+      - DATASET=UCIHAR
+      - NIID=False
+      - NCLIENTS=2
+      - DIRICHLET_ALPHA=1
+      - START2SHARE=-2
+      - HOMOMORPHIC=True
+      - HOMOMORPHIC_TYPE=Full
+    volumes:
+      - ./client:/client:r
+      - ./context:/context:r
+      - ./logs:/logs
+    networks:
+      - default
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role==worker
+          
+

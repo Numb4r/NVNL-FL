@@ -9,20 +9,22 @@ import numpy as np
 from functools import reduce
 import logging
 logging.basicConfig(level=logging.DEBUG)
-
+import time
 import random
 
 
 class HEServer(fl.server.strategy.FedAvg):
-    def __init__(self, num_clients, dirichlet_alpha, dataset, fraction_fit=1.0):
+    def __init__(self, num_clients, dirichlet_alpha, dataset, fraction_fit, homomorphic):
         self.num_clients     = num_clients
         self.dirichlet_alpha = dirichlet_alpha
         self.dataset         = dataset
         self.context         = self.get_server_context()
-        self.agg_parameters  = []
+        self.agg_parameters  = ''
+        self.homomorphic     = homomorphic
+        self.selection_time  = 0
+
  
-        super().__init__(fraction_fit=fraction_fit, min_available_clients=num_clients, 
-                         min_fit_clients=num_clients, min_evaluate_clients=num_clients)
+        super().__init__(fraction_fit=fraction_fit, min_available_clients=num_clients, min_evaluate_clients=num_clients)
         
     def get_server_context(self):
         with open(f'context/server_key.pkl', 'rb') as file:
@@ -32,49 +34,96 @@ class HEServer(fl.server.strategy.FedAvg):
     
     def configure_fit(self, server_round, parameters, client_manager):
         """Configure the next round of training."""
-        
+        selection_start = time.time()
         data2send = '' 
         if len(self.agg_parameters) > 0:
             data2send = self.agg_parameters
         
         config = {
             'he': data2send,
+            'round' : server_round
         }
         
         fit_ins = FitIns(parameters, config)
 
 		# Sample clients
         sample_size, min_num_clients = self.num_fit_clients(
-		    client_manager.num_available()
+		    client_manager.num_available(), 
 		)
         clients = client_manager.sample(
 		    num_clients=sample_size, min_num_clients=min_num_clients
 		)
 
 		# Return client/config pairs
-        print(clients)
+        self.selection_time = time.time() - selection_start
+
         return [(client, fit_ins) for client in clients]
+    
+    def log_metrics_client(self, metrics, server_round, end_delay):
+        cid         = int(metrics['cid'])
+        train_time  = float(metrics['train_time'])
+        delay       = end_delay - float(metrics['delay_start'])
+        loss        = float(metrics['loss'])
+        acc         = float(metrics['accuracy'])
+        data_size   = int(metrics['data_size'])
+
+        filename = f'logs/{self.dataset}/clients_he_novo.csv' if self.homomorphic else f'logs/{self.dataset}/clients_novo.csv'
+        os.makedirs(os.path.dirname(filename), exist_ok=True)
+
+        with open(filename, 'a') as file:
+            file.write(f"{server_round}, {cid}, {loss}, {acc}, {train_time}, {data_size}, {delay}\n")
+
+
+    def log_metrics_server(self, server_round, aggregation_time):
+        filename = f'logs/{self.dataset}/server_he.csv' if self.homomorphic else f'logs/{self.dataset}/server.csv'
+        os.makedirs(os.path.dirname(filename), exist_ok=True)
+
+        with open(filename, 'a') as file:
+            file.write(f"{server_round}, {self.selection_time}, {aggregation_time}\n")
+
 
     def aggregate_fit(self, server_round, results, failures):		
-        weights_results = []
-        agg_parameters  = 0
-        parameters_list = []
-        total_examples  = 0 
+        end_delay         = time.time()
+        weights_results   = []
+        agg_parameters    = 0
+        parameters_list   = []
+        total_examples    = 0 
+        aggregation_start = time.time()
+
+        if self.homomorphic:
         
-        for _, fit_res in results:
-            client_id      = str(fit_res.metrics['cid'])
-            parameters     = ts.ckks_tensor_from(self.context, fit_res.metrics['he']) 
-            parameters_list.append((parameters, int(fit_res.num_examples)))
-            total_examples  += int(fit_res.num_examples)
+            for _, fit_res in results:
+                client_id      = str(fit_res.metrics['cid'])
+                parameters     = ts.ckks_vector_from(self.context, fit_res.metrics['he']) 
+                parameters_list.append((parameters, int(fit_res.num_examples)))
+                total_examples  += int(fit_res.num_examples)
+
+                self.log_metrics_client(fit_res.metrics, server_round, end_delay)
+                
+            for parameters, num_examples in parameters_list:
+                weights         = num_examples / total_examples
+                agg_parameters  = agg_parameters + (parameters * weights)
+
             
-        for parameters, num_examples in parameters_list:
-            weights         = num_examples / total_examples
-            agg_parameters  = agg_parameters + (parameters * weights)
+            self.agg_parameters = agg_parameters.serialize()
+            aggregation_time    = time.time() - aggregation_start
+            self.log_metrics_server(server_round, aggregation_time)
 
+            return [], {}
         
-        self.agg_parameters = agg_parameters.serialize()
+        else:
+            for _, fit_res in results:
+                parameters_list.append((parameters_to_ndarrays(fit_res.parameters), fit_res.num_examples))
+                self.log_metrics_client(fit_res.metrics, server_round, end_delay)
 
-        return [], {}
+                
+            agg_parameters = aggregate(parameters_list)
+
+
+            aggregation_time = time.time() - aggregation_start
+            self.log_metrics_server(server_round, aggregation_time)
+
+            return ndarrays_to_parameters(agg_parameters), {}
     
     def aggregate(self, results):
         """Compute weighted average."""
@@ -130,6 +179,7 @@ class HEServer(fl.server.strategy.FedAvg):
         # Parameters and config
         config = {
             'he': self.agg_parameters,
+            'round' : server_round
         }  # {"server_round": server_round, "local_epochs": 1}
 
         evaluate_ins = EvaluateIns(parameters, config)
@@ -153,7 +203,8 @@ def main():
 	server =  HEServer(num_clients     =  int(os.environ['NCLIENTS']), 
                        dirichlet_alpha =  float(os.environ['DIRICHLET_ALPHA']), 
                        dataset         =  os.environ['DATASET'], 
-                       fraction_fit    =  float(os.environ['FRAC_FIT'])
+                       fraction_fit    =  float(os.environ['FRAC_FIT']),
+                       homomorphic     = os.environ['HOMOMORPHIC'] == 'True',
             )
 
 	fl.server.start_server(

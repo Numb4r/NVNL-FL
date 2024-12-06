@@ -1,1 +1,4 @@
 .venv/
+client/TenSEAL/
+client/tenseal.tar
+client/rasp_cli.tar

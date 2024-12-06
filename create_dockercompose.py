@@ -3,7 +3,7 @@ from optparse import OptionParser
 import random
 
 
-def add_server_info(clients, rounds, solution, dataset, frac_fit, alpha):
+def add_server_info(clients, rounds, solution, dataset, frac_fit, alpha, he):
     server_str = f"  server:\n\
     image: 'allanmsouza/flhe:server'\n\
     container_name: fl_server\n\
@@ -15,6 +15,7 @@ def add_server_info(clients, rounds, solution, dataset, frac_fit, alpha):
       - DATASET={dataset}\n\
       - FRAC_FIT={frac_fit}\n\
       - DIRICHLET_ALPHA={alpha}\n\
+      - HOMOMORPHIC={he}\n\
     volumes:\n\
       - ./server:/server:r\n\
       - ./context:/context:r\n\
@@ -30,7 +31,8 @@ def add_server_info(clients, rounds, solution, dataset, frac_fit, alpha):
 
     return server_str
 
-def add_client_info(cid, nclients, solution, dataset, niid, alpha):
+def add_client_info(cid, nclients, solution, dataset, niid, alpha,
+                    start2share, homomorphic, homomorphic_type):
     client_str = f"  client-{cid}:\n\
     image: 'allanmsouza/flhe:client'\n\
     environment:\n\
@@ -41,6 +43,9 @@ def add_client_info(cid, nclients, solution, dataset, niid, alpha):
       - NIID={niid}\n\
       - NCLIENTS={nclients}\n\
       - DIRICHLET_ALPHA={alpha}\n\
+      - START2SHARE={start2share}\n\
+      - HOMOMORPHIC={homomorphic}\n\
+      - HOMOMORPHIC_TYPE={homomorphic_type}\n\
     volumes:\n\
       - ./client:/client:r\n\
       - ./context:/context:r\n\
@@ -56,6 +61,17 @@ def add_client_info(cid, nclients, solution, dataset, niid, alpha):
 
     return client_str
 
+def add_shared_volume():
+    shared_volume = "volumes:\n\
+      vol_solution:\n\
+        driver: local\n\
+        driver_opts:\n\
+          type: nfs\n\
+          o: addr=10.10.10.113,nolock,soft,rw\n\
+          device: :/opt/nodes/FLHE\n\
+    \n\n"
+
+    return shared_volume
 
 def add_prometheus_grafana_cadvisor():
     prometheus_str = "  cadvisor:\n\
@@ -106,7 +122,9 @@ def main():
     parser.add_option("",   "--dirichilet",         dest="dirichilet",   default=1)
     parser.add_option("-f", "--frac-fit",           dest="frac_fit",   default=1)
     parser.add_option("",   "--niid",               dest="niid",   default=False)
-    
+    parser.add_option("",   "--start2share",        dest="start2share",   default=1)
+    parser.add_option("",   "--he",                 dest="he",   default=False)
+    parser.add_option("",   "--he-type",            dest="he_type",   default='Full')    
 
     (opt, args) = parser.parse_args()
 
@@ -115,17 +133,18 @@ def main():
 
         dockercompose_file.write(header)
                                     
-        server_str = add_server_info(opt.clients, opt.rounds, opt.solution, opt.dataset, opt.frac_fit, opt.dirichilet)
+        server_str = add_server_info(opt.clients, opt.rounds, opt.solution, opt.dataset, opt.frac_fit, opt.dirichilet, opt.he)
 
         dockercompose_file.write(server_str)
 
         for cid in range(int(opt.clients)):
-            client_str = add_client_info(cid, opt.clients, opt.solution, opt.dataset, opt.niid, opt.dirichilet)    
+            client_str = add_client_info(cid, opt.clients, opt.solution, opt.dataset, opt.niid, opt.dirichilet, 
+                                         opt.start2share, opt.he, opt.he_type)    
 
             dockercompose_file.write(client_str)
             
-        prometheus_str = add_prometheus_grafana_cadvisor()
-        dockercompose_file.write(prometheus_str)
+        # prometheus_str = add_prometheus_grafana_cadvisor()
+        # dockercompose_file.write(prometheus_str)
 
 if __name__ == '__main__':
 	main()
