@@ -8,3 +8,4 @@ flwr-datasets
 flwr_datasets[vision]
 matplotlib
 seaborn
+gmpy2

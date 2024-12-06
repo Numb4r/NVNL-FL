@@ -98,7 +98,7 @@ class HEServer(fl.server.strategy.FedAvg):
                 parameters_list.append((parameters, int(fit_res.num_examples)))
                 total_examples  += int(fit_res.num_examples)
 
-                self.log_metrics_client(fit_res.metrics, server_round, end_delay)
+                #self.log_metrics_client(fit_res.metrics, server_round, end_delay)
                 
             for parameters, num_examples in parameters_list:
                 weights         = num_examples / total_examples
@@ -107,21 +107,19 @@ class HEServer(fl.server.strategy.FedAvg):
             
             self.agg_parameters = agg_parameters.serialize()
             aggregation_time    = time.time() - aggregation_start
-            self.log_metrics_server(server_round, aggregation_time)
+            #self.log_metrics_server(server_round, aggregation_time)
 
             return [], {}
         
         else:
             for _, fit_res in results:
                 parameters_list.append((parameters_to_ndarrays(fit_res.parameters), fit_res.num_examples))
-                self.log_metrics_client(fit_res.metrics, server_round, end_delay)
-
+                #self.log_metrics_client(fit_res.metrics, server_round, end_delay)
                 
             agg_parameters = aggregate(parameters_list)
 
-
             aggregation_time = time.time() - aggregation_start
-            self.log_metrics_server(server_round, aggregation_time)
+            #self.log_metrics_server(server_round, aggregation_time)
 
             return ndarrays_to_parameters(agg_parameters), {}
     
@@ -196,7 +194,6 @@ class HEServer(fl.server.strategy.FedAvg):
         # Return client/config pairs
         # Each pair of (ClientProxy, FitRes) constitutes a successful update from one of the previously selected clients
         return [(client, evaluate_ins) for client in clients]
-
 
 def main():
 	

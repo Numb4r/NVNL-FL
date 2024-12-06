@@ -2,7 +2,7 @@ version: '3'
 services:
 
   server:
-    image: 'flhe:server'
+    image: 'allanmsouza/flhe:server'
     container_name: fl_server
     environment:
       - SERVER_IP=0.0.0.0:9999
