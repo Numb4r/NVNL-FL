@@ -53,11 +53,26 @@ class HEServer(fl.server.strategy.FedAvg):
         """Configure the next round of training."""
         
         data2send = '' 
+        print("CONFIGURE FIT")
+        size_array_bytes = []
         if len(self.agg_parameters) > 0:
             data2send = self.agg_parameters
-        
+            
+            for idx,layer in enumerate(data2send):
+                print(layer)
+                if layer != [0]:
+                    data2send[idx] = layer.serialize()
+                
+                else:
+                    data2send[idx] = pickle.dumps(layer)
+                size_array_bytes.append(len(data2send[idx]))
+
+        he =b''
+        for b in data2send:
+            he+=b
         config = {
-            'he': data2send,
+            'he': he,
+            "size_array_bytes":pickle.dumps(size_array_bytes)
         }
         
         fit_ins = FitIns(parameters, config)
@@ -79,19 +94,66 @@ class HEServer(fl.server.strategy.FedAvg):
         agg_parameters  = 0
         parameters_list = []
         total_examples  = 0 
-        
+        mask = []
         for _, fit_res in results:
+            print(f"RECEBIDO CLIENTE {fit_res.metrics['cid']}")
             client_id      = str(fit_res.metrics['cid'])
-            parameters     = ts.ckks_tensor_from(self.context, fit_res.metrics['he']) 
-            parameters_list.append((parameters, int(fit_res.num_examples)))
-            total_examples  += int(fit_res.num_examples)
+            mask = pickle.loads(fit_res.metrics["mask"])
+            size_array_bytes = pickle.loads(fit_res.metrics["size_array_bytes"])
+
+            he = fit_res.metrics['he']
+            # print(len(he))
+            # print(size_array_bytes)
+            parameters = []
+            idx = 0
+            for size in size_array_bytes:
+                parameters.append(he[idx:idx+size])
+                idx = idx+size
+            for idx,layer in enumerate(parameters):
+                parameters[idx] = ts.ckks_vector_from(self.context,layer)
             
-        for parameters, num_examples in parameters_list:
-            weights         = num_examples / total_examples
-            agg_parameters  = agg_parameters + (parameters * weights)
 
         
-        self.agg_parameters = agg_parameters.serialize()
+            matrix = [[0] for _ in mask]
+            count_idx_parameter = 0
+            for idx,row in enumerate(mask):
+                if row == 1:
+                    matrix[idx] = parameters[count_idx_parameter]
+                    count_idx_parameter+=1
+            # print(f"MATRIX:{matrix}")
+            parameters_list.append((matrix, int(fit_res.num_examples)))
+            total_examples  += int(fit_res.num_examples)
+        idx = 0
+        # print(f"AGG PARAMETERS: {self.agg_parameters}")
+        agg_parameters = [[0] for _ in mask]
+        print(f'AGG_PARAMETER GERADO MASCARA:{agg_parameters}')
+        for parameters, num_examples in parameters_list:
+            cl = []
+            weights         = num_examples / total_examples
+            for idx,layer in enumerate(parameters):
+                if layer != [0] :
+                    if agg_parameters[idx] == [0]:
+                        agg_parameters[idx] = (layer * weights)
+                    else:
+                        agg_parameters[idx]  = agg_parameters[idx] + (layer * weights)
+                # print(f"{idx} - {agg_parameters}")
+                    # print(self.agg_parameters[idx] )
+            #         cl.append(layer*weights)
+            #     else:
+            #         cl.append(layer)
+            # if agg_parameters == []:
+            #     agg_parameters= cl
+            # else:
+            #     for idx in range(len(agg_parameters)):
+            #         agg_parameters[idx]+=cl[idx]
+            print(f"agg_parameters:{agg_parameters}")
+        print("\n\n\t\tFINAL DA AGREGAÇÃO")
+        self.agg_parameters = agg_parameters
+        print("AGG_PARAMETERS")
+        print(self.agg_parameters)
+        
+        
+        
 
         return [], {}
     
@@ -117,6 +179,9 @@ class HEServer(fl.server.strategy.FedAvg):
     
     def aggregate_evaluate(self, server_round, results, failures):
         """Aggregate evaluation losses using weighted average."""
+        print("PARTE DA AGREGAÇÃO DA VALIDACAO SERVIDOR")
+        print(f"FAILURES: {self.accept_failures},{failures}")
+        print(f"RESULTS: {results}")
         if not results:
             return None, {}
         # Do not aggregate if there are failures and failures are not accepted
@@ -136,7 +201,7 @@ class HEServer(fl.server.strategy.FedAvg):
                 for _, evaluate_res in results
             ]
         )
-
+        print(f"ACURACIAS E LOSS:{accuracies},{loss_aggregated}")
         print(f"Round {server_round} aggregated loss: {loss_aggregated} aggregated accuracy: {sum(accuracies)/len(accuracies)}")
         with open(f'{self.log_folder}/server_evaluate.csv', 'a') as f:
             f.write(f"{sum(accuracies)/len(accuracies)},{loss_aggregated}\n")
@@ -147,11 +212,34 @@ class HEServer(fl.server.strategy.FedAvg):
         """Configure the next round of evaluation."""
         if self.fraction_evaluate == 0.0:
             return []
-
-        # Parameters and config
+        data2send = '' 
+        print("CONFIGURE EVALUATE")
+        size_array_bytes = []
+        # print(self.agg_parameters)
+        if len(self.agg_parameters) > 0:
+            data2send =  [x for x in self.agg_parameters]
+            print("\n\n\t\tLOOP")
+            for idx,layer in enumerate(data2send):
+                
+                print(data2send[idx])
+                if layer != [0]:
+                    data2send[idx] = data2send[idx].serialize()
+                else:
+                    data2send[idx] = pickle.dumps(layer)
+                size_array_bytes.append(len(data2send[idx]))
+        print("\n\n")
+        he =b''
+        for b in data2send:
+            he+=b
+        # he = data2send
         config = {
-            'he': self.agg_parameters,
-        }  # {"server_round": server_round, "local_epochs": 1}
+            'he': he,
+            "size_array_bytes":pickle.dumps(size_array_bytes)
+        }
+        # Parameters and config
+        # config = {
+        #     'he': self.agg_parameters,
+        # }  # {"server_round": server_round, "local_epochs": 1}
 
         evaluate_ins = EvaluateIns(parameters, config)
 
