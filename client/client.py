@@ -11,17 +11,18 @@ from dataset_utils import ManageDatasets, load_data_flowerdataset
 
 import tracemalloc
 import sys
-import pickle
 import time
 
-from models import create_alexnet, create_dnn, create_lenet5, reshape_parameters, flat_parameters
+from models import create_cnn, create_dnn, create_lenet5, reshape_parameters, flat_parameters
 from client_logs import write_train_logs, write_evaluate_logs
+from client_utils import get_size, packing, cypher_packs, get_topk_mask, decypher_packs, flat_packs, remove_padding
+
 # import logging
 # logging.basicConfig(level=logging.DEBUG)
 
 class HEClient(fl.client.NumPyClient):
     def __init__(self, cid, niid, dataset, num_clients, 
-                 dirichlet_alpha, start2share, homomorphic, homomorphic_type):
+                 dirichlet_alpha, start2share, homomorphic, packing, homomorphic_type):
         
         self.cid              = int(cid)
         self.dataset          = dataset
@@ -32,6 +33,7 @@ class HEClient(fl.client.NumPyClient):
         self.dataset_manager  = ManageDatasets(self.cid)
         self.start2share      = start2share
         self.homomorphic      = homomorphic
+        self.packing          = packing
         self.homomorphic_type = homomorphic_type                                    
 
         if dataset == 'MNIST' or dataset == 'CIFAR10':
@@ -72,26 +74,28 @@ class HEClient(fl.client.NumPyClient):
             return self.dataset_manager.load_ExtraSensory()
         if dataset == 'MotionSense':
             return self.dataset_manager.load_MotionSense()
-
-    
-    def he_parameters_to_model(self, he_parameters):
+ 
+    def he_parameters_to_model(self, config):
+        he_parameters        = ts.ckks_vector_from(self.context, config['he'])
         local_parameters     = self.model.get_weights()
         decrypted_parameters = he_parameters.decrypt()
-        reshaped_parameters  = reshape_parameters(decrypted_parameters)
+        reshaped_parameters  = reshape_parameters(self, decrypted_parameters)
         self.model.set_weights(reshaped_parameters)
         # temp_flat            = self.flat_parameters(local_parameters[:self.start2share])
         # temp_flat.extend(decrypted_parameters)
 
     def fit(self, parameters, config):
         
-        decyfer_time = time.time()
+        decypher_time = time.time()
         if len(config['he']) > 0 and self.homomorphic:
-            he_parameters        = ts.ckks_vector_from(self.context, config['he'])
-            self.he_parameters_to_model(he_parameters)
+            if self.packing:
+                self.he_packs_to_model(config)
+            else:
+                self.he_parameters_to_model(config)
             
         else:
             self.model.set_weights(parameters)
-        decyfer_time = time.time() - decyfer_time
+        decypher_time = time.time() - decypher_time
 
         train_time = time.time()
         history    = self.model.fit(self.x_train, self.y_train, epochs=1)
@@ -102,40 +106,51 @@ class HEClient(fl.client.NumPyClient):
 
         trained_parameters = self.model.get_weights()
         he_parameters      = []
-        cyfer_time         = time.time()
+        cypher_time         = time.time()
         
-        if self.homomorphic:
+        if self.packing: 
+            packed_parameters = packing(flat_parameters(trained_parameters))
+            topk_mask         = get_topk_mask(packed_parameters, 0.1)
+            cyphered_packs    = cypher_packs(packed_parameters, topk_mask, self.context)
+            he_parameters     = pickle.dumps(cyphered_packs)
+            model_size        = get_size(cyphered_packs)
+
+        elif self.homomorphic and not self.packing:
             flatted_parameters = flat_parameters(trained_parameters) 
             he_parameters      = ts.ckks_vector(self.context, flatted_parameters)
             he_parameters      = he_parameters.serialize()
-            model_size         = sys.getsizeof(he_parameters) 
+            model_size         = sys.getsizeof(he_parameters)
+            topk_mask          =  '' 
         
         else:
             flatted_parameters  = flat_parameters(trained_parameters)
             temp_buf            = pickle.dumps(flatted_parameters)
             model_size          = sys.getsizeof(temp_buf)
+            topk_mask           =  '' 
         
-        cyfer_time = time.time() - cyfer_time
+        cypher_time = time.time() - cypher_time
         
-        write_train_logs(self, config['round'], loss, acc, model_size, train_time, cyfer_time, decyfer_time)
+        write_train_logs(self, config['round'], loss, acc, model_size, train_time, cypher_time, decypher_time)
        
-        fit_msg = self.create_fit_msg(train_time, acc, loss, model_size, he_parameters)
+        fit_msg = self.create_fit_msg(train_time, acc, loss, model_size, he_parameters, topk_mask)
        
         return trained_parameters, len(self.x_train), fit_msg
 
     def evaluate(self, parameters, config):
-        decyfer_time = time.time()
+        decypher_time = time.time()
         if len(config['he']) > 0 and self.homomorphic:
-            client_context = self.get_client_context()
-            he_parameters        = ts.ckks_vector_from(client_context, config['he'])
-            self.he_parameters_to_model(he_parameters)
+            if self.packing:
+                self.he_packs_to_model(config)
+                
+            else:
+                self.he_parameters_to_model(config)
             
         else:
             self.model.set_weights(parameters)
-        decyfer_time = time.time() - decyfer_time
+        decypher_time = time.time() - decypher_time
         loss, acc = self.model.evaluate(self.x_test, self.y_test)
 
-        write_evaluate_logs(self, config['round'], loss, acc, decyfer_time)
+        write_evaluate_logs(self, config['round'], loss, acc, decypher_time)
 
         eval_msg = {
             'cid'     : self.cid,
@@ -145,7 +160,22 @@ class HEClient(fl.client.NumPyClient):
 
         return loss, len(self.x_test), eval_msg
     
-    def create_fit_msg(self, train_time, acc, loss, model_size, he_parameters):
+    def he_packs_to_model(self, config):
+        packed_parameters    = packing(flat_parameters(self.model.get_weights()))
+        cyphered_packs        = pickle.loads(config['he'])
+        decyphered_pack       = decypher_packs(cyphered_packs, self.context)
+        aggredated_mask      = pickle.loads(config['mask'])
+        
+        for idx_mask, m in enumerate(aggredated_mask):
+            if m > 0:
+                packed_parameters[idx_mask] = decyphered_pack.pop(0)
+                
+        flatted_packs       = flat_packs(packed_parameters)
+        flatted_packs       = remove_padding(self, flatted_packs)
+        reshaped_parameters = reshape_parameters(self, flatted_packs)
+        self.model.set_weights(reshaped_parameters)
+    
+    def create_fit_msg(self, train_time, acc, loss, model_size, he_parameters, mask=''):
         
         fit_msg = {
             'cid'         : self.cid,
@@ -154,7 +184,8 @@ class HEClient(fl.client.NumPyClient):
             'loss'        : loss,
             'delay_start' : time.time(),
             'data_size'   : model_size,
-            'he'          : he_parameters if self.homomorphic else ''
+            'he'          : he_parameters if self.homomorphic else '',
+            'mask'        : pickle.dumps(mask)
         }
         
         return fit_msg
@@ -171,6 +202,7 @@ def main():
                         dirichlet_alpha = float(os.environ['DIRICHLET_ALPHA']),
                         start2share     = int(os.environ['START2SHARE']),
                         homomorphic     = os.environ['HOMOMORPHIC'] == 'True',
+                        packing         = os.environ['PACKING'] == 'True',
                         homomorphic_type= str(os.environ['HOMOMORPHIC_TYPE'])
                         )
         

@@ -12,16 +12,23 @@ logging.basicConfig(level=logging.DEBUG)
 import time
 import random
 
+from server_utils import align_packs, aggregate_packs_and_masks, serialize_packs, get_pack_mask_pair 
+from server_utils import aggregate_packs_and_mask, get_cyphered_parameters, aggregated_cyphered_parameters
+
+import pickle as pk
 
 class HEServer(fl.server.strategy.FedAvg):
-    def __init__(self, num_clients, dirichlet_alpha, dataset, fraction_fit, homomorphic):
+    def __init__(self, num_clients, dirichlet_alpha, dataset, fraction_fit, homomorphic, packing):
         self.num_clients     = num_clients
         self.dirichlet_alpha = dirichlet_alpha
         self.dataset         = dataset
         self.context         = self.get_server_context()
         self.agg_parameters  = ''
+        self.agg_mask        = ''
         self.homomorphic     = homomorphic
+        self.packing         = packing
         self.selection_time  = 0
+        
 
  
         super().__init__(fraction_fit=fraction_fit, min_available_clients=num_clients, min_evaluate_clients=num_clients)
@@ -41,6 +48,7 @@ class HEServer(fl.server.strategy.FedAvg):
         
         config = {
             'he': data2send,
+            'mask': self.agg_mask,
             'round' : server_round
         }
         
@@ -91,33 +99,33 @@ class HEServer(fl.server.strategy.FedAvg):
         aggregation_start = time.time()
 
         if self.homomorphic:
-        
-            for _, fit_res in results:
-                client_id      = str(fit_res.metrics['cid'])
-                parameters     = ts.ckks_vector_from(self.context, fit_res.metrics['he']) 
-                parameters_list.append((parameters, int(fit_res.num_examples)))
-                total_examples  += int(fit_res.num_examples)
-
-                #self.log_metrics_client(fit_res.metrics, server_round, end_delay)
-                
-            for parameters, num_examples in parameters_list:
-                weights         = num_examples / total_examples
-                agg_parameters  = agg_parameters + (parameters * weights)
-
             
-            self.agg_parameters = agg_parameters.serialize()
-            aggregation_time    = time.time() - aggregation_start
-            #self.log_metrics_server(server_round, aggregation_time)
+            if self.packing: #packing aggregation
+                aggregated_masks                   = []
+                pack_mask_pair, total_examples     = get_pack_mask_pair(self, results)
+                aggregated_packs, aggregated_masks = aggregate_packs_and_mask(pack_mask_pair, total_examples)
+                
+                aggregated_packs    = serialize_packs(aggregated_packs)
+                self.agg_parameters = pickle.dumps(aggregated_packs)
+                self.agg_mask       = pickle.dumps(aggregated_masks)
+                
+                return [], {}
+                
+            else: #no packing aggregation
+                parameters_list, total_examples = get_cyphered_parameters(self, results)
+                agg_parameters  = aggregated_cyphered_parameters(parameters_list, total_examples)
 
-            return [], {}
+                self.agg_parameters = agg_parameters.serialize()
+                aggregation_time    = time.time() - aggregation_start
+                #self.log_metrics_server(server_round, aggregation_time)
+                return [], {}
         
-        else:
+        else: #plaintext aggregation
             for _, fit_res in results:
                 parameters_list.append((parameters_to_ndarrays(fit_res.parameters), fit_res.num_examples))
                 #self.log_metrics_client(fit_res.metrics, server_round, end_delay)
                 
-            agg_parameters = aggregate(parameters_list)
-
+            agg_parameters   = aggregate(parameters_list)
             aggregation_time = time.time() - aggregation_start
             #self.log_metrics_server(server_round, aggregation_time)
 
@@ -176,8 +184,9 @@ class HEServer(fl.server.strategy.FedAvg):
 
         # Parameters and config
         config = {
-            'he': self.agg_parameters,
-            'round' : server_round
+            'he'    : self.agg_parameters,
+            'round' : server_round,
+            'mask'  : self.agg_mask,
         }  # {"server_round": server_round, "local_epochs": 1}
 
         evaluate_ins = EvaluateIns(parameters, config)
@@ -202,6 +211,7 @@ def main():
                        dataset         =  os.environ['DATASET'], 
                        fraction_fit    =  float(os.environ['FRAC_FIT']),
                        homomorphic     = os.environ['HOMOMORPHIC'] == 'True',
+                       packing         = os.environ['PACKING'] == 'True',
             )
 
 	fl.server.start_server(
