@@ -55,7 +55,7 @@ def get_pack_mask_pair(self, results):
         
     return pack_mask_pair, total_examples
 
-def aggregate_packs_and_mask(pack_mask_pair, total_examples):
+def aggregate_packs_and_mask(pack_mask_pair, total_examples, onlysum):
     aggregated_packs = [0 for i in range(len(pack_mask_pair[0][1]))]
     aggregated_masks = [0 for i in range(len(pack_mask_pair[0][1]))]
     
@@ -63,8 +63,12 @@ def aggregate_packs_and_mask(pack_mask_pair, total_examples):
         mask = mask / total_examples
 
         for idx_pack, p in enumerate(packs):
-            aggregated_packs[idx_pack] = aggregated_packs[idx_pack] + (p * mask[idx_pack])
-            aggregated_masks[idx_pack] = aggregated_masks[idx_pack] + mask[idx_pack]
+            if onlysum:
+                aggregated_packs[idx_pack] = aggregated_packs[idx_pack] + p
+                aggregated_masks[idx_pack] = aggregated_masks[idx_pack] + mask[idx_pack] * total_examples
+            else:
+                aggregated_packs[idx_pack] = aggregated_packs[idx_pack] + (p * mask[idx_pack])
+                aggregated_masks[idx_pack] = aggregated_masks[idx_pack] + mask[idx_pack]
             
     return aggregated_packs, aggregated_masks
 
@@ -82,12 +86,16 @@ def get_cyphered_parameters(self, results):
     return parameters_list, total_examples
   
 
-def aggregated_cyphered_parameters(parameters_list, total_examples):
+def aggregated_cyphered_parameters(parameters_list, total_examples, only_sum=False):
     agg_parameters = 0
     
     for parameters, num_examples in parameters_list:
-        weights         = num_examples / total_examples
-        agg_parameters  = agg_parameters + (parameters * weights)
+        
+        if only_sum:
+            agg_parameters  = agg_parameters + parameters
+        else:    
+            weights         = num_examples / total_examples
+            agg_parameters  = agg_parameters + (parameters * weights)
         
     return agg_parameters
     

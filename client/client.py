@@ -22,7 +22,7 @@ from client_utils import get_size, packing, cypher_packs, get_topk_mask, decyphe
 
 class HEClient(fl.client.NumPyClient):
     def __init__(self, cid, niid, dataset, num_clients, 
-                 dirichlet_alpha, start2share, homomorphic, packing, homomorphic_type):
+                 dirichlet_alpha, start2share, homomorphic, packing, onlysum, homomorphic_type):
         
         self.cid              = int(cid)
         self.dataset          = dataset
@@ -34,6 +34,7 @@ class HEClient(fl.client.NumPyClient):
         self.start2share      = start2share
         self.homomorphic      = homomorphic
         self.packing          = packing
+        self.only_sum         = onlysum
         self.homomorphic_type = homomorphic_type                                    
 
         if dataset == 'MNIST' or dataset == 'CIFAR10':
@@ -79,6 +80,9 @@ class HEClient(fl.client.NumPyClient):
         he_parameters        = ts.ckks_vector_from(self.context, config['he'])
         local_parameters     = self.model.get_weights()
         decrypted_parameters = he_parameters.decrypt()
+        if self.only_sum:
+            decrypted_parameters  = np.array(decrypted_parameters) / float(config['total_examples'])
+            
         reshaped_parameters  = reshape_parameters(self, decrypted_parameters)
         self.model.set_weights(reshaped_parameters)
         # temp_flat            = self.flat_parameters(local_parameters[:self.start2share])
@@ -108,15 +112,22 @@ class HEClient(fl.client.NumPyClient):
         he_parameters      = []
         cypher_time         = time.time()
         
-        if self.packing: 
-            packed_parameters = packing(flat_parameters(trained_parameters))
-            topk_mask         = get_topk_mask(packed_parameters, 0.1)
-            cyphered_packs    = cypher_packs(packed_parameters, topk_mask, self.context)
-            he_parameters     = pickle.dumps(cyphered_packs)
-            model_size        = get_size(cyphered_packs)
+        if self.packing:
+            flatted_parameters = flat_parameters(trained_parameters)     
+            packed_parameters  = packing(flatted_parameters)
+            if self.only_sum:
+                packed_parameters = [np.array(pack) * len(self.x_train) for pack in packed_parameters] 
+                
+            topk_mask          = get_topk_mask(packed_parameters, 0.1)
+            cyphered_packs     = cypher_packs(packed_parameters, topk_mask, self.context)
+            he_parameters      = pickle.dumps(cyphered_packs)
+            model_size         = get_size(cyphered_packs)
 
         elif self.homomorphic and not self.packing:
             flatted_parameters = flat_parameters(trained_parameters) 
+            if self.only_sum:
+                flatted_parameters = np.array(flatted_parameters) * len(self.x_train)
+                
             he_parameters      = ts.ckks_vector(self.context, flatted_parameters)
             he_parameters      = he_parameters.serialize()
             model_size         = sys.getsizeof(he_parameters)
@@ -161,15 +172,18 @@ class HEClient(fl.client.NumPyClient):
         return loss, len(self.x_test), eval_msg
     
     def he_packs_to_model(self, config):
-        packed_parameters    = packing(flat_parameters(self.model.get_weights()))
-        cyphered_packs        = pickle.loads(config['he'])
-        decyphered_pack       = decypher_packs(cyphered_packs, self.context)
-        aggredated_mask      = pickle.loads(config['mask'])
+        packed_parameters  = packing(flat_parameters(self.model.get_weights()))
+        cyphered_packs     = pickle.loads(config['he'])
+        decyphered_pack    = decypher_packs(cyphered_packs, self.context)
+        aggredated_mask    = pickle.loads(config['mask'])
         
         for idx_mask, m in enumerate(aggredated_mask):
             if m > 0:
-                packed_parameters[idx_mask] = decyphered_pack.pop(0)
-                
+                if self.only_sum:
+                    packed_parameters[idx_mask] = np.array(decyphered_pack.pop(0)) / m
+                else:
+                    packed_parameters[idx_mask] = decyphered_pack.pop(0)
+        
         flatted_packs       = flat_packs(packed_parameters)
         flatted_packs       = remove_padding(self, flatted_packs)
         reshaped_parameters = reshape_parameters(self, flatted_packs)
@@ -203,6 +217,7 @@ def main():
                         start2share     = int(os.environ['START2SHARE']),
                         homomorphic     = os.environ['HOMOMORPHIC'] == 'True',
                         packing         = os.environ['PACKING'] == 'True',
+                        onlysum         = os.environ['ONLYSUM'] == 'True',
                         homomorphic_type= str(os.environ['HOMOMORPHIC_TYPE'])
                         )
         

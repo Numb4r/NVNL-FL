@@ -14,6 +14,7 @@ services:
       - DIRICHLET_ALPHA=0.5
       - HOMOMORPHIC=True
       - PACKING=True
+      - ONLYSUM=True
     volumes:
       - ./server:/server:r
       - ./context:/context:r
@@ -41,6 +42,7 @@ services:
       - HOMOMORPHIC=True
       - PACKING=True
       - HOMOMORPHIC_TYPE=Full
+      - ONLYSUM=True
     volumes:
       - ./client:/client:r
       - ./context:/context:r
@@ -68,6 +70,7 @@ services:
       - HOMOMORPHIC=True
       - PACKING=True
       - HOMOMORPHIC_TYPE=Full
+      - ONLYSUM=True
     volumes:
       - ./client:/client:r
       - ./context:/context:r
