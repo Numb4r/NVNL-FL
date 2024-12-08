@@ -9,12 +9,13 @@ services:
       - NCLIENTS=2
       - NUM_ROUNDS=50
       - SOLUTION_NAME=FLHE
-      - DATASET=CIFAR10
+      - DATASET=MNIST
       - FRAC_FIT=0.2
       - DIRICHLET_ALPHA=0.5
       - HOMOMORPHIC=True
-      - PACKING=True
+      - PACKING=False
       - ONLYSUM=True
+      - HOMOMORPHIC_TYPE=Paillier
     volumes:
       - ./server:/server:r
       - ./context:/context:r
@@ -34,14 +35,14 @@ services:
       - SERVER_IP=fl_server:9999
       - CID=0
       - SOLUTION_NAME=FLHE
-      - DATASET=CIFAR10
+      - DATASET=MNIST
       - NIID=True
       - NCLIENTS=2
       - DIRICHLET_ALPHA=0.5
       - START2SHARE=2
       - HOMOMORPHIC=True
-      - PACKING=True
-      - HOMOMORPHIC_TYPE=Full
+      - PACKING=False
+      - HOMOMORPHIC_TYPE=Paillier
       - ONLYSUM=True
     volumes:
       - ./client:/client:r
@@ -62,14 +63,14 @@ services:
       - SERVER_IP=fl_server:9999
       - CID=1
       - SOLUTION_NAME=FLHE
-      - DATASET=CIFAR10
+      - DATASET=MNIST
       - NIID=True
       - NCLIENTS=2
       - DIRICHLET_ALPHA=0.5
       - START2SHARE=2
       - HOMOMORPHIC=True
-      - PACKING=True
-      - HOMOMORPHIC_TYPE=Full
+      - PACKING=False
+      - HOMOMORPHIC_TYPE=Paillier
       - ONLYSUM=True
     volumes:
       - ./client:/client:r

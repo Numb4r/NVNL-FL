@@ -6,9 +6,9 @@ def create_dnn(input_shape, num_classes):
     model = tf.keras.models.Sequential([
         tf.keras.layers.Input(shape=(input_shape[1:])),
         tf.keras.layers.Flatten(),
-        tf.keras.layers.Dense(128, activation='relu'),
-        tf.keras.layers.Dense(64,  activation='relu'),
-        tf.keras.layers.Dense(32,  activation='relu'),
+        # tf.keras.layers.Dense(128, activation='relu'),
+        # tf.keras.layers.Dense(64,  activation='relu'),
+        # tf.keras.layers.Dense(32,  activation='relu'),
         tf.keras.layers.Dense(num_classes, activation='softmax'),
 
     ])

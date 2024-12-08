@@ -16,13 +16,13 @@ from server_utils import align_packs, aggregate_packs_and_masks, serialize_packs
 from server_utils import aggregate_packs_and_mask, get_cyphered_parameters, aggregated_cyphered_parameters
 
 import pickle as pk
+from encryption.paillier import PaillierCipher
 
 class HEServer(fl.server.strategy.FedAvg):
-    def __init__(self, num_clients, dirichlet_alpha, dataset, fraction_fit, homomorphic, packing, onlysum):
+    def __init__(self, num_clients, dirichlet_alpha, dataset, fraction_fit, homomorphic, packing, onlysum, homomorphic_type):
         self.num_clients     = num_clients
         self.dirichlet_alpha = dirichlet_alpha
         self.dataset         = dataset
-        self.context         = self.get_server_context()
         self.agg_parameters  = ''
         self.agg_mask        = ''
         self.homomorphic     = homomorphic
@@ -30,13 +30,22 @@ class HEServer(fl.server.strategy.FedAvg):
         self.onlysum         = onlysum
         self.selection_time  = 0
         self.total_examples  = 0
+        self.homomorphic_type= homomorphic_type
+        self.context         = self.get_server_context()
         
         super().__init__(fraction_fit=fraction_fit, min_available_clients=num_clients, min_evaluate_clients=num_clients)
         
     def get_server_context(self):
-        with open(f'context/server_key.pkl', 'rb') as file:
-            secret = pickle.load(file)  
-        context = ts.context_from(secret["context"])
+        
+        if self.homomorphic_type == 'Paillier':
+            with open(f'context/paillier.pkl', 'rb') as file:
+                context = pickle.load(file)    
+        
+        else:
+            with open(f'context/server_key.pkl', 'rb') as file:
+                secret = pickle.load(file)  
+                context = ts.context_from(secret["context"])
+        
         return context
     
     def configure_fit(self, server_round, parameters, client_manager):
@@ -115,11 +124,14 @@ class HEServer(fl.server.strategy.FedAvg):
                 
             else: #no packing aggregation
                 parameters_list, total_examples = get_cyphered_parameters(self, results)
-                agg_parameters  = aggregated_cyphered_parameters(parameters_list, total_examples)
+                agg_parameters  = aggregated_cyphered_parameters(self, parameters_list, total_examples)
 
-                self.agg_parameters = agg_parameters.serialize()
-                aggregation_time    = time.time() - aggregation_start
-                self.total_examples = total_examples
+                if self.homomorphic_type == 'Paillier':
+                    self.agg_parameters = pickle.dumps(agg_parameters)
+                    self.total_examples = len(parameters_list)
+                else:
+                    self.agg_parameters = agg_parameters.serialize()
+                    self.total_examples = total_examples
                 #self.log_metrics_server(server_round, aggregation_time)
                 return [], {}
         
@@ -220,6 +232,7 @@ def main():
                        homomorphic     = os.environ['HOMOMORPHIC'] == 'True',
                        packing         = os.environ['PACKING'] == 'True',
                        onlysum         = os.environ['ONLYSUM'] == 'True',
+                       homomorphic_type = str(os.environ['HOMOMORPHIC_TYPE'])
             )
 
 	fl.server.start_server(

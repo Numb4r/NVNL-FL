@@ -3,6 +3,8 @@ import os
 import pickle
 import numpy as np
 
+from encryption.paillier import PaillierCipher
+
 def context():
     """
     This function is used to create the context of the homomorphic encryption:
@@ -79,8 +81,16 @@ def combo_keys(client_path="secret.pkl", server_path="server_key.pkl"):
     print("Is the server context private?", ("Yes" if context_server.is_private() else "No"))
 
 
+def Paillier_keys():
+    paillier = PaillierCipher()
+    paillier.generate_key(n_length=2048)
+    
+    with open("context/paillier.pkl", "wb") as file:
+        pickle.dump(paillier, file)
+
 def main():
     combo_keys()
+    Paillier_keys()
 
 if __name__ == "__main__":
     main()

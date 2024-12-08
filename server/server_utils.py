@@ -78,21 +78,34 @@ def get_cyphered_parameters(self, results):
     
     for _, fit_res in results:
         client_id      = str(fit_res.metrics['cid'])
-        parameters     = ts.ckks_vector_from(self.context, fit_res.metrics['he']) 
-        parameters_list.append((parameters, int(fit_res.num_examples)))
-        total_examples  += int(fit_res.num_examples)
+        
+        if self.homomorphic_type == 'Paillier':
+            parameters = pk.loads(fit_res.metrics['he'])
+            parameters_list.append((parameters, int(fit_res.num_examples)))
+            total_examples  += int(fit_res.num_examples)
+            
+        else:
+            parameters     = ts.ckks_vector_from(self.context, fit_res.metrics['he']) 
+            parameters_list.append((parameters, int(fit_res.num_examples)))
+            total_examples  += int(fit_res.num_examples)
 
         #self.log_metrics_client(fit_res.metrics, server_round, end_delay)
     return parameters_list, total_examples
   
 
-def aggregated_cyphered_parameters(parameters_list, total_examples, only_sum=False):
+def aggregated_cyphered_parameters(self, parameters_list, total_examples):
     agg_parameters = 0
     
     for parameters, num_examples in parameters_list:
         
-        if only_sum:
-            agg_parameters  = agg_parameters + parameters
+        if self.onlysum:
+            if self.homomorphic_type == 'Paillier':
+                if len(agg_parameters) == 0:
+                    agg_parameters = parameters
+                else:     
+                    agg_parameters = (agg_parameters * parameters) % pow(self.context.get_n(),2)
+            else:
+                agg_parameters  = (agg_parameters + parameters)
         else:    
             weights         = num_examples / total_examples
             agg_parameters  = agg_parameters + (parameters * weights)

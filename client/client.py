@@ -17,6 +17,9 @@ from models import create_cnn, create_dnn, create_lenet5, reshape_parameters, fl
 from client_logs import write_train_logs, write_evaluate_logs
 from client_utils import get_size, packing, cypher_packs, get_topk_mask, decypher_packs, flat_packs, remove_padding
 
+from encryption.quantize import quantize, unquantize, batch_padding, unbatching_padding
+from encryption.paillier import PaillierCipher
+
 # import logging
 # logging.basicConfig(level=logging.DEBUG)
 
@@ -35,7 +38,9 @@ class HEClient(fl.client.NumPyClient):
         self.homomorphic      = homomorphic
         self.packing          = packing
         self.only_sum         = onlysum
-        self.homomorphic_type = homomorphic_type                                    
+        self.homomorphic_type = homomorphic_type   
+        
+        self.len_shared_data  = 0                                 
 
         if dataset == 'MNIST' or dataset == 'CIFAR10':
             self.x_train, self.y_train, self.x_test, self.y_test = load_data_flowerdataset(self)
@@ -53,15 +58,14 @@ class HEClient(fl.client.NumPyClient):
         
         
     def get_client_context(self):
-        if self.homomorphic_type == 'Full':
-            with open(f'../context/secret.pkl', 'rb') as file:
-                secret = pickle.load(file)
+        if self.homomorphic_type == 'Paillier':
+            with open(f'context/paillier.pkl', 'rb') as file:
+                context = pickle.load(file)    
         else:
-            with open(f'../context/secret_partial.pkl', 'rb') as file:
-                secret = pickle.load(file)  
-
-        context = ts.context_from(secret["context"])
-
+            with open(f'../context/secret.pkl', 'rb') as file:
+                secret = pickle.load(file) 
+                context = ts.context_from(secret["context"])
+                
         return context
 
     def get_parameters(self, config):
@@ -77,14 +81,34 @@ class HEClient(fl.client.NumPyClient):
             return self.dataset_manager.load_MotionSense()
  
     def he_parameters_to_model(self, config):
-        he_parameters        = ts.ckks_vector_from(self.context, config['he'])
-        local_parameters     = self.model.get_weights()
-        decrypted_parameters = he_parameters.decrypt()
-        if self.only_sum:
-            decrypted_parameters  = np.array(decrypted_parameters) / float(config['total_examples'])
+        
+        if self.homomorphic_type == 'Paillier':
+            quan_bits     = 32
+            batch_size    = 50
+            padding_bits  = int(np.ceil(np.log2(self.num_clients + 1)))
+            elem_bits     = quan_bits + padding_bits
             
-        reshaped_parameters  = reshape_parameters(self, decrypted_parameters)
-        self.model.set_weights(reshaped_parameters)
+            he_parameters = pickle.loads(config['he'])
+            he_parameters = self.context.decrypt(he_parameters)
+            he_parameters = unbatching_padding(he_parameters, elem_bits, batch_size)[:(int(np.prod((self.len_shared_data))))]
+            he_parameters = unquantize(he_parameters, quan_bits, self.num_clients)
+            if self.only_sum:
+                he_parameters = np.array(he_parameters) / float(config['total_examples']) 
+            
+            
+            print(he_parameters[:20])
+            reshaped_parameters = reshape_parameters(self, he_parameters)
+            self.model.set_weights(reshaped_parameters)
+        
+        else:
+            he_parameters        = ts.ckks_vector_from(self.context, config['he'])
+            local_parameters     = self.model.get_weights()
+            decrypted_parameters = he_parameters.decrypt()
+            if self.only_sum:
+                decrypted_parameters  = np.array(decrypted_parameters) / float(config['total_examples'])
+                
+            reshaped_parameters  = reshape_parameters(self, decrypted_parameters)
+            self.model.set_weights(reshaped_parameters)
         # temp_flat            = self.flat_parameters(local_parameters[:self.start2share])
         # temp_flat.extend(decrypted_parameters)
 
@@ -125,13 +149,31 @@ class HEClient(fl.client.NumPyClient):
 
         elif self.homomorphic and not self.packing:
             flatted_parameters = flat_parameters(trained_parameters) 
+            
             if self.only_sum:
-                flatted_parameters = np.array(flatted_parameters) * len(self.x_train)
-                
-            he_parameters      = ts.ckks_vector(self.context, flatted_parameters)
-            he_parameters      = he_parameters.serialize()
-            model_size         = sys.getsizeof(he_parameters)
-            topk_mask          =  '' 
+                flatted_parameters = np.array(flatted_parameters) #* len(self.x_train)
+            
+            if self.homomorphic_type == 'Paillier':
+                quan_bits     = 32
+                batch_size    = 50
+                padding_bits  = int(np.ceil(np.log2(self.num_clients + 1)))
+                elem_bits     = quan_bits + padding_bits
+                    
+                quan_param    = quantize(flatted_parameters, quan_bits, self.num_clients)
+                quan_param    = batch_padding(quan_param, self.context.key_length, elem_bits, batch_size=batch_size)
+
+                he_parameters = self.context.encrypt(quan_param)
+                he_parameters = pickle.dumps(he_parameters)
+                model_size    = sys.getsizeof(he_parameters)
+                topk_mask     =  '' 
+                self.len_shared_data = len(flatted_parameters)
+                print(f'CIFREI {len(he_parameters)}')
+            
+            else:
+                he_parameters      = ts.ckks_vector(self.context, flatted_parameters)
+                he_parameters      = he_parameters.serialize()
+                model_size         = sys.getsizeof(he_parameters)
+                topk_mask          =  '' 
         
         else:
             flatted_parameters  = flat_parameters(trained_parameters)
@@ -204,8 +246,6 @@ class HEClient(fl.client.NumPyClient):
         
         return fit_msg
         
-    
-
 def main():
     
     client =  HEClient(
