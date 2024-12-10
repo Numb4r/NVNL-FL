@@ -1,7 +1,7 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 import os
-
+import re
 LOG_DIR="logs"
 path_img="img"
 TOTAL_USERS=2
@@ -9,12 +9,11 @@ from pathlib import Path
 folders = [f for f in Path(LOG_DIR).iterdir() if f.is_dir()]
 
 print(folders[0].parts[1])
-def generate_client_train(cid,path):
+def generate_client_train(cid,path,type_technique):
     df = pd.read_csv(f"{path}/client_{cid}_train.csv")
 
     
     fig, ((ax1,ax2),(ax3,ax4)) = plt.subplots(nrows=2, ncols=2,figsize=(10, 6))
-    
     ax1.plot(df.iloc[:,0], label='Acurácia', marker='o', color='b')
     ax1.set_title('Acurácia ao longo das Iterações')
     ax1.set_xlabel('Iterações')
@@ -45,14 +44,15 @@ def generate_client_train(cid,path):
     ax4.set_ylabel('Tamanho vetor criptografado')
     ax4.grid(True)
     ax4.legend()
-
+    plt.suptitle(f"Technique {type_technique}")
+    plt.tight_layout(rect=[0, 0, 1, 0.96])
     plt.savefig(f"{path_img}/{path.parts[1]}/client_{cid}_train.png")
     plt.close()
     
     
-    
 
-def generate_client_eval(cid,path):
+
+def generate_client_eval(cid,path,type_technique):
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 12))
     df = pd.read_csv(f"{path}/client_{cid}_eval.csv")
     # Subplot para Acurácia
@@ -75,11 +75,13 @@ def generate_client_eval(cid,path):
     plt.tight_layout()
     
     # Mostrar o gráfico
+    plt.suptitle(f"Technique {type_technique}")
+    plt.tight_layout(rect=[0, 0, 1, 0.96])
     plt.savefig(f"{path_img}/{path.parts[1]}/client_{cid}_eval.png")
     plt.close()
     # 
 
-def generate_server_eval(path):
+def generate_server_eval(path,type_technique):
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 12))
     df = pd.read_csv(f"{path}/server_evaluate.csv")
     # Subplot para Acurácia
@@ -102,9 +104,12 @@ def generate_server_eval(path):
     plt.tight_layout()
     
     # Mostrar o gráfico
+    plt.suptitle(f"Technique {type_technique}")
+    plt.tight_layout(rect=[0, 0, 1, 0.96])
     plt.savefig(f"{path_img}/{path.parts[1]}/server_eval.png")
     plt.close()
     
+
 
 if not os.path.exists('img'):
     os.makedirs('img')
@@ -117,10 +122,21 @@ for f in folders:
         continue  # Pule para a próxima pasta
     if not os.path.exists(f'img/{f.parts[1]}'):
         os.makedirs(f"img/{f.parts[1]}")
-    generate_server_eval(f)
+    type_technique = ''
+    info_file = str(f)+'/info.txt'
+    with open(info_file,'r') as file:
+        data = file.read()
+    print(data)
+    match = re.search(r'TYPE\s*=\s*(\w+)',data)
+    
+    if match:
+        type_technique = f'{match.group(1)}\n'
+    
+    
+    generate_server_eval(f,type_technique)
     for c in range(TOTAL_USERS):
-        generate_client_eval(c,f)
-        generate_client_train(c,f)
+        generate_client_eval(c,f,type_technique)
+        generate_client_train(c,f,type_technique)
 
 
 
