@@ -12,10 +12,7 @@ services:
       - DATASET=MNIST
       - FRAC_FIT=0.2
       - DIRICHLET_ALPHA=0.5
-      - HOMOMORPHIC=True
-      - PACKING=False
-      - ONLYSUM=True
-      - HOMOMORPHIC_TYPE=Paillier
+      - SOLUTION=BatchCrypt
     volumes:
       - ./server:/server:r
       - ./context:/context:r
@@ -40,10 +37,7 @@ services:
       - NCLIENTS=2
       - DIRICHLET_ALPHA=0.5
       - START2SHARE=2
-      - HOMOMORPHIC=True
-      - PACKING=False
-      - HOMOMORPHIC_TYPE=Paillier
-      - ONLYSUM=True
+      - SOLUTION=BatchCrypt
     volumes:
       - ./client:/client:r
       - ./context:/context:r
@@ -68,10 +62,7 @@ services:
       - NCLIENTS=2
       - DIRICHLET_ALPHA=0.5
       - START2SHARE=2
-      - HOMOMORPHIC=True
-      - PACKING=False
-      - HOMOMORPHIC_TYPE=Paillier
-      - ONLYSUM=True
+      - SOLUTION=BatchCrypt
     volumes:
       - ./client:/client:r
       - ./context:/context:r

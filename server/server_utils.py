@@ -100,7 +100,7 @@ def aggregated_cyphered_parameters(self, parameters_list, total_examples):
         
         if self.onlysum:
             if self.homomorphic_type == 'Paillier':
-                if len(agg_parameters) == 0:
+                if isinstance(agg_parameters, int):
                     agg_parameters = parameters
                 else:     
                     agg_parameters = (agg_parameters * parameters) % pow(self.context.get_n(),2)

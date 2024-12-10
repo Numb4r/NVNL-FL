@@ -8,10 +8,7 @@ from encryption.encrypt import Encrypt
 
 from encryption.quantize import quantize, unquantize, batch_padding, unbatching_padding
 
-
-
 N_JOBS = 2 #cpu_count()
-
 
 def _static_encrypt(value, n):
     pubkey = PaillierPublicKey(n)

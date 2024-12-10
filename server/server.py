@@ -19,22 +19,51 @@ import pickle as pk
 from encryption.paillier import PaillierCipher
 
 class HEServer(fl.server.strategy.FedAvg):
-    def __init__(self, num_clients, dirichlet_alpha, dataset, fraction_fit, homomorphic, packing, onlysum, homomorphic_type):
+    def __init__(self, num_clients, dirichlet_alpha, dataset, fraction_fit, solution):
         self.num_clients     = num_clients
         self.dirichlet_alpha = dirichlet_alpha
         self.dataset         = dataset
         self.agg_parameters  = ''
         self.agg_mask        = ''
-        self.homomorphic     = homomorphic
-        self.packing         = packing
-        self.onlysum         = onlysum
         self.selection_time  = 0
         self.total_examples  = 0
-        self.homomorphic_type= homomorphic_type
+        # self.homomorphic_type= homomorphic_type
+        # self.homomorphic     = homomorphic
+        # self.packing         = packing
+        # self.onlysum         = onlysum
+        self.solution        = str(solution).lower()
+        
+        self.config_solution()
         self.context         = self.get_server_context()
         
         super().__init__(fraction_fit=fraction_fit, min_available_clients=num_clients, min_evaluate_clients=num_clients)
         
+    def config_solution(self):
+        
+        if str(self.solution).lower() == 'ckks':
+            self.homomorphic      = True
+            self.packing          = False
+            self.onlysum         = False
+            self.homomorphic_type = 'CKKS'
+        
+        elif str(self.solution).lower() == 'batchcrypt':
+            self.homomorphic      = True
+            self.homomorphic_type = 'Paillier'
+            self.onlysum         = True
+            self.packing          = False
+            
+        elif str(self.solution).lower() == 'fedphe':
+            self.homomorphic      = True
+            self.homomorphic_type = 'CKKS'
+            self.onlysum         = False
+            self.packing          = True
+            
+        elif str(self.solution).lower() == 'plaintext':
+            self.homomorphic      = False
+            self.onlysum         = False
+            self.packing          = False
+            self.homomorphic_type = 'None'    
+    
     def get_server_context(self):
         
         if self.homomorphic_type == 'Paillier':
@@ -128,7 +157,7 @@ class HEServer(fl.server.strategy.FedAvg):
 
                 if self.homomorphic_type == 'Paillier':
                     self.agg_parameters = pickle.dumps(agg_parameters)
-                    self.total_examples = len(parameters_list)
+                    self.total_examples = len(parameters_list) #number of clients
                 else:
                     self.agg_parameters = agg_parameters.serialize()
                     self.total_examples = total_examples
@@ -229,10 +258,11 @@ def main():
                        dirichlet_alpha =  float(os.environ['DIRICHLET_ALPHA']), 
                        dataset         =  os.environ['DATASET'], 
                        fraction_fit    =  float(os.environ['FRAC_FIT']),
-                       homomorphic     = os.environ['HOMOMORPHIC'] == 'True',
-                       packing         = os.environ['PACKING'] == 'True',
-                       onlysum         = os.environ['ONLYSUM'] == 'True',
-                       homomorphic_type = str(os.environ['HOMOMORPHIC_TYPE'])
+                       solution        = str(os.environ['SOLUTION'])
+                    #    homomorphic     = os.environ['HOMOMORPHIC'] == 'True',
+                    #    packing         = os.environ['PACKING'] == 'True',
+                    #    onlysum         = os.environ['ONLYSUM'] == 'True',
+                    #    homomorphic_type = str(os.environ['HOMOMORPHIC_TYPE'])
             )
 
 	fl.server.start_server(
