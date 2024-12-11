@@ -3,7 +3,27 @@ import os
 import pickle
 import numpy as np
 
-def context():
+# from client.encryption.paillier import PaillierCipher
+
+def context_bfv():
+    """
+    This function is used to create the context of the homomorphic encryption:
+    it is used to create the keys and the parameters of the encryption scheme (BFV).
+
+    :return: the context of the homomorphic encryption
+    """
+    cont = ts.context(
+        ts.SCHEME_TYPE.BFV,
+        poly_modulus_degree=8192,
+        plain_modulus=1032193
+    )
+
+    cont.generate_galois_keys()  # You can create the Galois keys by calling generate_galois_keys
+    # cont.generate_relin_keys()
+    # cont.global_scale = 2 ** 40  # global_scale: the scaling factor, here set to 2**40 (same that pow(2, 40))
+    return cont
+
+def context_ckks():
     """
     This function is used to create the context of the homomorphic encryption:
     it is used to create the keys and the parameters of the encryption scheme (CKKS).
@@ -59,19 +79,22 @@ def write_query(file_path, client_query):
         encode_str = pickle.dumps(client_query)
         file.write(encode_str)
 
-def combo_keys(client_path="secret.pkl", server_path="server_key.pkl"):
+def combo_keys(type='ckks', client_path="secret.pkl", server_path="server_key.pkl"):
     """
     To create the public/private keys combination
     args:
         client_path: path to save the secret key (str)
         server_path: path to save the server public key (str)
     """
-    context_client = context()
-    write_query(f'context/{client_path}', {"context": context_client.serialize(save_secret_key=True)})
-    write_query(f'context/{server_path}', {"context": context_client.serialize()})
+    if type == 'ckks':
+        context_client = context_ckks()
+    else:
+        context_client = context_bfv()
+    write_query(f'context/{type}_{client_path}', {"context": context_client.serialize(save_secret_key=True)})
+    write_query(f'context/{type}_{server_path}', {"context": context_client.serialize()})
 
-    _, context_client = read_query(f'context/{client_path}')
-    _, context_server = read_query(f'context/{server_path}')
+    _, context_client = read_query(f'context/{type}_{client_path}')
+    _, context_server = read_query(f'context/{type}_{server_path}')
 
     context_client = ts.context_from(context_client)
     context_server = ts.context_from(context_server)
@@ -79,8 +102,17 @@ def combo_keys(client_path="secret.pkl", server_path="server_key.pkl"):
     print("Is the server context private?", ("Yes" if context_server.is_private() else "No"))
 
 
+def Paillier_keys():
+    paillier = PaillierCipher()
+    paillier.generate_key(n_length=2048)
+    
+    with open("context/paillier.pkl", "wb") as file:
+        pickle.dump(paillier, file)
+
 def main():
-    combo_keys()
+    combo_keys('ckks')
+    # combo_keys('bfv')
+    # Paillier_keys()
 
 if __name__ == "__main__":
     main()

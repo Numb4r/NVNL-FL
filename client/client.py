@@ -7,7 +7,21 @@ import os
 import random
 import tenseal as ts
 import pickle
-import numpy as np
+from dataset_utils import ManageDatasets, load_data_flowerdataset
+
+import tracemalloc
+import sys
+import time
+
+from models import create_cnn, create_dnn, create_lenet5, reshape_parameters, flat_parameters
+from client_logs import write_train_logs, write_evaluate_logs
+from client_utils import get_size, packing, cypher_packs, get_topk_mask, decypher_packs, flat_packs, remove_padding
+
+from encryption.quantize import quantize, unquantize, batch_padding, unbatching_padding
+from encryption.paillier import PaillierCipher
+
+from literature import fit_ckks, fit_bfv, fit_batchcrypt, fit_fedphe, fit_plaintext, he_packs_to_model, he_parameters_to_model
+# import logging
 # logging.basicConfig(level=logging.DEBUG)
 
 # import logging
@@ -30,135 +44,135 @@ def get_latest_created_folder(directory):
 
 
 class HEClient(fl.client.NumPyClient):
-    def __init__(self, cid, niid, dataset, num_clients, dirichlet_alpha):
+    def __init__(self, cid, niid, dataset, num_clients, 
+                 dirichlet_alpha, start2share, solution):
         
-        self.NOT_ENCRYPTED_LAYERS = 12
-        self.log_folder = get_latest_created_folder(LOG_DIR)
-        self.cid             = int(cid)
-        self.dataset         = dataset
-        self.niid            = niid
-        self.num_clients     = num_clients
-        self.dirichlet_alpha = dirichlet_alpha
-        self.last_parameters = None                                   
+        self.cid              = int(cid)
+        self.dataset          = dataset
+        self.niid             = niid
+        self.num_clients      = num_clients
+        self.dirichlet_alpha  = dirichlet_alpha
+        self.last_parameters  = None
+        self.dataset_manager  = ManageDatasets(self.cid)
+        self.start2share      = start2share
+        self.solution         = str(solution).lower()
+        # self.homomorphic      = homomorphic
+        # self.packing          = packing
+        # self.only_sum         = onlysum
+        # self.homomorphic_type = homomorphic_type   
 
-        self.x_train, self.y_train, self.x_test, self.y_test = self.load_data()
-        self.model                                           = self.create_model(self.x_train.shape)
-        self.context                                         = self.get_client_context()
+        if dataset == 'MNIST' or dataset == 'CIFAR10':
+            self.x_train, self.y_train, self.x_test, self.y_test = load_data_flowerdataset(self)
+        else:
+            self.x_train, self.y_train, self.x_test, self.y_test = self.load_har(dataset) #self.load_data()
+            
+        if dataset == 'CIFAR10':
+            self.model  = create_lenet5(self.x_train.shape, 10)
+
+        else:
+            self.model  = create_dnn(self.x_train.shape, 10)
+        
+        self.len_shared_data  =  len(flat_parameters(self.model.get_weights()))                               
+        
+        self.config_solution()
+        if self.homomorphic:
+            self.context = self.get_client_context()
         
         
     def get_client_context(self):
-        with open(f'context/secret.pkl', 'rb') as file:
-            secret = pickle.load(file)  
-
-        context = ts.context_from(secret["context"])
-
+        if self.homomorphic_type == 'Paillier':
+            with open(f'context/paillier.pkl', 'rb') as file:
+                context = pickle.load(file)    
+        else:
+            if 'CKKS' == self.homomorphic_type:
+                with open(f'../context/ckks_secret.pkl', 'rb') as file:
+                    secret = pickle.load(file) 
+                    context = ts.context_from(secret["context"])
+            else:
+                with open(f'../context/bfv_secret.pkl', 'rb') as file:
+                    secret = pickle.load(file) 
+                    context = ts.context_from(secret["context"])
+                
         return context
 
     def get_parameters(self, config):
         parameters           = self.model.get_weights()
         return parameters
     
-    def create_model(self, input_shape):
-        model = tf.keras.models.Sequential([
-            tf.keras.layers.Input(shape=(28, 28, 1)),
-            tf.keras.layers.Flatten(),
-            tf.keras.layers.Dense(32, activation='relu'),
-            tf.keras.layers.Dense(16,  activation='relu'),
-            tf.keras.layers.Dense(10, activation='softmax'),
-
-        ])
-
-        model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
-    
-        return model
-
-    def load_data(self):
+    def load_har(self, dataset):
+        if dataset == 'UCIHAR':
+            return self.dataset_manager.load_UCIHAR()
+        if dataset == 'ExtraSensory':
+            return self.dataset_manager.load_ExtraSensory()
+        if dataset == 'MotionSense':
+            return self.dataset_manager.load_MotionSense()
+ 
+    def config_solution(self):
         
-        if self.niid:
-            partitioner_train = DirichletPartitioner(num_partitions=self.num_clients, partition_by="label",
-                                    alpha=self.dirichlet_alpha, min_partition_size=100,
-                                    self_balancing=False)
-        else:
-            partitioner_train =  IidPartitioner(num_partitions=self.num_clients)
+        if str(self.solution).lower() == 'ckks':
+            self.homomorphic      = True
+            self.packing          = False
+            self.only_sum         = False
+            self.homomorphic_type = 'CKKS'
+            
+        elif str(self.solution).lower() == 'bfv':
+            self.homomorphic      = True
+            self.packing          = False
+            self.only_sum         = True
+            self.homomorphic_type = 'BFV'
         
-        fds               = FederatedDataset(dataset=self.dataset, partitioners={"train": partitioner_train})
-        train             = fds.load_partition(self.cid).with_format("numpy")
-        partitioner_test  = IidPartitioner(num_partitions=self.num_clients)
-        fds_eval          = FederatedDataset(dataset=self.dataset, partitioners={"test": partitioner_test})
-        test              = fds_eval.load_partition(self.cid).with_format("numpy")
-
-        return train['image']/255.0, train['label'], test['image']/255.0, test['label']
-
-    def flat_parameters(self, parameters):
-        flat_params = []
-
-        for param in parameters:
-            flat_params.extend(param.flatten())
-
-        return flat_params
-
-    def reshape_parameters(self, decrypted_parameters):
-        reshaped_parameters = []
-
-        for layer in self.model.get_weights():
-            reshaped_parameters.append(np.reshape(decrypted_parameters[:layer.size], layer.shape))
-            decrypted_parameters = decrypted_parameters[layer.size:]
-
-        return reshaped_parameters
+        elif str(self.solution).lower() == 'batchcrypt':
+            self.homomorphic      = True
+            self.homomorphic_type = 'Paillier'
+            self.only_sum         = True
+            self.packing          = False
+            
+        elif str(self.solution).lower() == 'fedphe':
+            self.homomorphic      = True
+            self.homomorphic_type = 'CKKS'
+            self.only_sum         = False
+            self.packing          = True
+            
+        elif str(self.solution).lower() == 'plaintext':
+            self.homomorphic      = False
+            self.only_sum         = False
+            self.packing          = False
+            self.homomorphic_type = 'None'       
 
     def fit(self, parameters, config):
         
-        # print(f"Client {self.cid} - {config}")
-        
-        if len(config['he']) > 0:
-            he_parameters        = ts.ckks_tensor_from(self.context, config['he'])
-            local_parameters     = self.model.get_weights()
-            temp_flat            = self.flat_parameters(local_parameters[:self.NOT_ENCRYPTED_LAYERS])
-            decrypted_parameters = he_parameters.decrypt().raw
-            temp_flat.extend(decrypted_parameters)
+        if str(self.solution).lower() == 'ckks':
+            fit_msg = fit_ckks(self, parameters, config)
             
-            reshaped_parameters  = self.reshape_parameters(temp_flat)
-            self.model.set_weights(reshaped_parameters)
-
-        #parameters_decoded = self.encoder.decrypt_decode_double(parameters)
-        # self.model.set_weights(self.last_parameters)
-
-        history = self.model.fit(self.x_train, self.y_train, epochs=1)
-        acc     = np.mean(history.history['accuracy'])
-        loss    = np.mean(history.history['loss'])
-
-        
-        trained_parameters = self.model.get_weights()
-        flat_parameters    = self.flat_parameters(trained_parameters[self.NOT_ENCRYPTED_LAYERS:])
-        # he_parameters      = ts.ckks_tensor(client_context, trained_parameters[-1]) 
-        he_parameters      = ts.ckks_tensor(self.context, flat_parameters) 
-        serialized = he_parameters.serialize()
-
-        fit_msg = {
-            'cid'     : self.cid,
-            'accuracy': acc,
-            'loss'    : loss,
-            'he'      : serialized
-        }
-        print(f'{len(trained_parameters[self.NOT_ENCRYPTED_LAYERS:])}')
-        with open(f'{self.log_folder}/client_{self.cid}_train.csv', 'a') as f:
-            f.write(f"{acc},{loss},{len(flat_parameters)},{len(serialized)} \n")
-        return self.flat_parameters(trained_parameters[:self.NOT_ENCRYPTED_LAYERS]), len(self.x_train), fit_msg
+        elif str(self.solution).lower() == 'bfv':
+            fit_msg = fit_bfv(self, parameters, config)
+            
+        elif str(self.solution).lower() == 'batchcrypt':
+            fit_msg = fit_batchcrypt(self, parameters, config)
+            
+        elif str(self.solution).lower() == 'fedphe':
+            fit_msg = fit_fedphe(self, parameters, config)
+            
+        elif str(self.solution).lower() == 'plaintext':
+            fit_msg = fit_plaintext(self, parameters, config)
+       
+        return self.model.get_weights(), len(self.x_train), fit_msg
 
     def evaluate(self, parameters, config):
-        client_context = self.get_client_context()
-        
-        if len(config['he']) > 0:
-            he_parameters        = ts.ckks_tensor_from(client_context, config['he'])
-            local_parameters     = self.model.get_weights()
-            temp_flat            = self.flat_parameters(local_parameters[:self.NOT_ENCRYPTED_LAYERS])
-            decrypted_parameters = he_parameters.decrypt().raw
-            temp_flat.extend(decrypted_parameters)
+        decypher_time = time.time()
+        if len(config['he']) > 0 and self.homomorphic:
+            if self.packing:
+                he_packs_to_model(self, config)
+                
+            else:
+                he_parameters_to_model(self, config)
             
-            reshaped_parameters  = self.reshape_parameters(temp_flat)
-            self.model.set_weights(reshaped_parameters)
-
+        else:
+            self.model.set_weights(parameters)
+        decypher_time = time.time() - decypher_time
         loss, acc = self.model.evaluate(self.x_test, self.y_test)
+
+        write_evaluate_logs(self, config['round'], loss, acc, decypher_time)
 
         eval_msg = {
             'cid'     : self.cid,
@@ -171,19 +185,39 @@ class HEClient(fl.client.NumPyClient):
 
         return loss, len(self.x_test), eval_msg
     
-
+    def create_fit_msg(self, train_time, acc, loss, model_size, he_parameters, mask=''):
+        
+        fit_msg = {
+            'cid'         : self.cid,
+            'train_time'  : train_time,
+            'accuracy'    : acc,
+            'loss'        : loss,
+            'delay_start' : time.time(),
+            'data_size'   : model_size,
+            'he'          : he_parameters if self.homomorphic else '',
+            'mask'        : pickle.dumps(mask)
+        }
+        
+        return fit_msg
+        
 def main():
-	
-	client =  HEClient(
-					cid             = int(os.environ['CID']), 
-                    niid            = bool(os.environ['NIID']), 
-                    dataset         = os.environ['DATASET'], 
-                    num_clients     = int(os.environ['NCLIENTS']), 
-                    dirichlet_alpha = float(os.environ['DIRICHLET_ALPHA'])
-                    )
-	
-	fl.client.start_numpy_client(server_address=os.environ['SERVER_IP'], 
-                              client=client)
+    
+    client =  HEClient(
+                        cid             = int(os.environ['CID']), 
+                        niid            = os.environ['NIID'] == 'True', 
+                        dataset         = os.environ['DATASET'], 
+                        num_clients     = int(os.environ['NCLIENTS']), 
+                        dirichlet_alpha = float(os.environ['DIRICHLET_ALPHA']),
+                        start2share     = int(os.environ['START2SHARE']),
+                        solution        = str(os.environ['SOLUTION'])
+                        # homomorphic     = os.environ['HOMOMORPHIC'] == 'True',
+                        # packing         = os.environ['PACKING'] == 'True',
+                        # onlysum         = os.environ['ONLYSUM'] == 'True',
+                        # homomorphic_type= str(os.environ['HOMOMORPHIC_TYPE'])
+                        )
+        
+    fl.client.start_numpy_client(server_address=os.environ['SERVER_IP'], 
+                                client=client)
 
 
 if __name__ == '__main__':

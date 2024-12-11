@@ -1,0 +1,150 @@
+version: '3'
+services:
+
+  server:
+    image: 'allanmsouza/flhe:server'
+    container_name: fl_server
+    environment:
+      - SERVER_IP=0.0.0.0:9999
+      - NCLIENTS=4
+      - NUM_ROUNDS=100
+      - SOLUTION_NAME=FLHE_rasp
+      - DATASET=MNIST
+      - FRAC_FIT=1
+      - DIRICHLET_ALPHA=1
+      - HOMOMORPHIC=False
+    volumes:
+      - vol_logs:/logs:rw
+      - vol_server:/server:rw
+    networks:
+      - default
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role==manager
+    
+
+  client-0:
+    image: 'allanmsouza/flhe:rasp_client'
+    environment:
+      - SERVER_IP=fl_server:9999
+      - CID=0
+      - SOLUTION_NAME=FLHE_rasp
+      - DATASET=MNIST
+      - NIID=True
+      - NCLIENTS=4
+      - DIRICHLET_ALPHA=1
+      - START2SHARE=1
+      - HOMOMORPHIC=False
+      - HOMOMORPHIC_TYPE=Full
+    volumes:
+      - vol_logs:/logs:rw
+      - vol_client:/client:rw
+    networks:
+      - default
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role==worker
+          
+
+  client-1:
+    image: 'allanmsouza/flhe:rasp_client'
+    environment:
+      - SERVER_IP=fl_server:9999
+      - CID=1
+      - SOLUTION_NAME=FLHE_rasp
+      - DATASET=MNIST
+      - NIID=True
+      - NCLIENTS=4
+      - DIRICHLET_ALPHA=1
+      - START2SHARE=1
+      - HOMOMORPHIC=False
+      - HOMOMORPHIC_TYPE=Full
+    volumes:
+      - vol_logs:/logs:rw
+      - vol_client:/client:rw
+    networks:
+      - default
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role==worker
+          
+
+  client-2:
+    image: 'allanmsouza/flhe:rasp_client'
+    environment:
+      - SERVER_IP=fl_server:9999
+      - CID=2
+      - SOLUTION_NAME=FLHE_rasp
+      - DATASET=MNIST
+      - NIID=True
+      - NCLIENTS=4
+      - DIRICHLET_ALPHA=1
+      - START2SHARE=1
+      - HOMOMORPHIC=False
+      - HOMOMORPHIC_TYPE=Full
+    volumes:
+      - vol_logs:/logs:rw
+      - vol_client:/client:rw
+    networks:
+      - default
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role==worker
+          
+
+  client-3:
+    image: 'allanmsouza/flhe:rasp_client'
+    environment:
+      - SERVER_IP=fl_server:9999
+      - CID=3
+      - SOLUTION_NAME=FLHE_rasp
+      - DATASET=MNIST
+      - NIID=True
+      - NCLIENTS=4
+      - DIRICHLET_ALPHA=1
+      - START2SHARE=1
+      - HOMOMORPHIC=False
+      - HOMOMORPHIC_TYPE=Full
+    volumes:
+      - vol_logs:/logs:rw
+      - vol_client:/client:rw
+    networks:
+      - default
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role==worker
+          
+
+volumes:
+  vol_logs:
+    driver: local
+    driver_opts:
+      type: nfs
+      o: addr=10.10.10.113,nolock,soft,rw
+      device: :/opt/nodes/FLHE/logs
+
+  vol_client:
+      driver: local
+      driver_opts:
+        type: nfs
+        o: addr=10.10.10.113,nolock,soft,rw
+        device: :/opt/nodes/FLHE/client
+    
+  vol_server:
+      driver: local
+      driver_opts:
+        type: nfs
+        o: addr=10.10.10.113,nolock,soft,rw
+        device: :/opt/nodes/FLHE/server
+    
+

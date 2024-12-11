@@ -11,7 +11,7 @@ def add_server_info(clients, rounds, solution, dataset, frac_fit, alpha):
       - SERVER_IP=0.0.0.0:9999\n\
       - NCLIENTS={clients}\n\
       - NUM_ROUNDS={rounds}\n\
-      - SOLUTION_NAME={solution}\n\
+      - SOLUTION={solution}\n\
       - DATASET={dataset}\n\
       - FRAC_FIT={frac_fit}\n\
       - DIRICHLET_ALPHA={alpha}\n\
@@ -30,17 +30,19 @@ def add_server_info(clients, rounds, solution, dataset, frac_fit, alpha):
 
     return server_str
 
-def add_client_info(cid, nclients, solution, dataset, niid, alpha):
+def add_client_info(cid, nclients, solution, dataset, niid, alpha,
+                    start2share):
     client_str = f"  client-{cid}:\n\
     image: 'allanmsouza/flhe:client'\n\
     environment:\n\
       - SERVER_IP=fl_server:9999\n\
       - CID={cid}\n\
-      - SOLUTION_NAME={solution}\n\
+      - SOLUTION={solution}\n\
       - DATASET={dataset}\n\
       - NIID={niid}\n\
       - NCLIENTS={nclients}\n\
       - DIRICHLET_ALPHA={alpha}\n\
+      - START2SHARE={start2share}\n\
     volumes:\n\
       - ./client:/client:r\n\
       - ./context:/context:r\n\
@@ -56,6 +58,17 @@ def add_client_info(cid, nclients, solution, dataset, niid, alpha):
 
     return client_str
 
+def add_shared_volume():
+    shared_volume = "volumes:\n\
+      vol_solution:\n\
+        driver: local\n\
+        driver_opts:\n\
+          type: nfs\n\
+          o: addr=10.10.10.113,nolock,soft,rw\n\
+          device: :/opt/nodes/FLHE\n\
+    \n\n"
+
+    return shared_volume
 
 def add_prometheus_grafana_cadvisor():
     prometheus_str = "  cadvisor:\n\
@@ -106,11 +119,13 @@ def main():
     parser.add_option("",   "--dirichilet",         dest="dirichilet",   default=1)
     parser.add_option("-f", "--frac-fit",           dest="frac_fit",   default=1)
     parser.add_option("",   "--niid",               dest="niid",   default=False)
-    
+    parser.add_option("",   "--start2share",        dest="start2share",   default=1)
+    parser.add_option("",   "--he",                 dest="he",   default=False)
+    parser.add_option("",   "--he-type",            dest="he_type",   default='Full')    
 
     (opt, args) = parser.parse_args()
 
-    with open(f'{opt.solution}-{opt.dataset}-{opt.clients}.yaml', 'a') as dockercompose_file:
+    with open(f'{opt.solution}-{opt.dataset}-{opt.clients}.yaml', 'w') as dockercompose_file:
         header = f"version: '3'\nservices:\n\n"
 
         dockercompose_file.write(header)
@@ -120,12 +135,13 @@ def main():
         dockercompose_file.write(server_str)
 
         for cid in range(int(opt.clients)):
-            client_str = add_client_info(cid, opt.clients, opt.solution, opt.dataset, opt.niid, opt.dirichilet)    
+            client_str = add_client_info(cid, opt.clients, opt.solution, opt.dataset, opt.niid, opt.dirichilet, 
+                                         opt.start2share)    
 
             dockercompose_file.write(client_str)
             
-        prometheus_str = add_prometheus_grafana_cadvisor()
-        dockercompose_file.write(prometheus_str)
+        # prometheus_str = add_prometheus_grafana_cadvisor()
+        # dockercompose_file.write(prometheus_str)
 
 if __name__ == '__main__':
 	main()
