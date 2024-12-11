@@ -43,24 +43,30 @@ class HEServer(fl.server.strategy.FedAvg):
         if str(self.solution).lower() == 'ckks':
             self.homomorphic      = True
             self.packing          = False
-            self.onlysum         = False
+            self.onlysum          = False
             self.homomorphic_type = 'CKKS'
+            
+        elif str(self.solution).lower() == 'bfv':
+            self.homomorphic      = True
+            self.packing          = False
+            self.onlysum          = True
+            self.homomorphic_type = 'BFV'
         
         elif str(self.solution).lower() == 'batchcrypt':
             self.homomorphic      = True
             self.homomorphic_type = 'Paillier'
-            self.onlysum         = True
+            self.onlysum          = True
             self.packing          = False
             
         elif str(self.solution).lower() == 'fedphe':
             self.homomorphic      = True
             self.homomorphic_type = 'CKKS'
-            self.onlysum         = False
+            self.onlysum          = False
             self.packing          = True
             
         elif str(self.solution).lower() == 'plaintext':
             self.homomorphic      = False
-            self.onlysum         = False
+            self.onlysum          = False
             self.packing          = False
             self.homomorphic_type = 'None'    
     
@@ -71,9 +77,14 @@ class HEServer(fl.server.strategy.FedAvg):
                 context = pickle.load(file)    
         
         else:
-            with open(f'context/server_key.pkl', 'rb') as file:
-                secret = pickle.load(file)  
-                context = ts.context_from(secret["context"])
+            if 'CKKS' == self.homomorphic_type:
+                with open(f'context/ckks_server_key.pkl', 'rb') as file:
+                    secret = pickle.load(file)  
+                    context = ts.context_from(secret["context"])
+            else:
+                with open(f'../context/bfv_secret.pkl', 'rb') as file:
+                    secret = pickle.load(file) 
+                    context = ts.context_from(secret["context"])
         
         return context
     
@@ -158,9 +169,14 @@ class HEServer(fl.server.strategy.FedAvg):
                 if self.homomorphic_type == 'Paillier':
                     self.agg_parameters = pickle.dumps(agg_parameters)
                     self.total_examples = len(parameters_list) #number of clients
-                else:
+                
+                elif self.homomorphic_type == 'CKKS':
                     self.agg_parameters = agg_parameters.serialize()
                     self.total_examples = total_examples
+                    
+                elif self.homomorphic_type == 'BFV':
+                    self.agg_parameters = agg_parameters.serialize()
+                    self.total_examples = len(parameters_list)
                 #self.log_metrics_server(server_round, aggregation_time)
                 return [], {}
         

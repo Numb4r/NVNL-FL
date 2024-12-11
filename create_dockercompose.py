@@ -3,7 +3,7 @@ from optparse import OptionParser
 import random
 
 
-def add_server_info(clients, rounds, solution, dataset, frac_fit, alpha, he):
+def add_server_info(clients, rounds, solution, dataset, frac_fit, alpha):
     server_str = f"  server:\n\
     image: 'allanmsouza/flhe:server'\n\
     container_name: fl_server\n\
@@ -11,11 +11,10 @@ def add_server_info(clients, rounds, solution, dataset, frac_fit, alpha, he):
       - SERVER_IP=0.0.0.0:9999\n\
       - NCLIENTS={clients}\n\
       - NUM_ROUNDS={rounds}\n\
-      - SOLUTION_NAME={solution}\n\
+      - SOLUTION={solution}\n\
       - DATASET={dataset}\n\
       - FRAC_FIT={frac_fit}\n\
       - DIRICHLET_ALPHA={alpha}\n\
-      - HOMOMORPHIC={he}\n\
     volumes:\n\
       - ./server:/server:r\n\
       - ./context:/context:r\n\
@@ -32,20 +31,18 @@ def add_server_info(clients, rounds, solution, dataset, frac_fit, alpha, he):
     return server_str
 
 def add_client_info(cid, nclients, solution, dataset, niid, alpha,
-                    start2share, homomorphic, homomorphic_type):
+                    start2share):
     client_str = f"  client-{cid}:\n\
     image: 'allanmsouza/flhe:client'\n\
     environment:\n\
       - SERVER_IP=fl_server:9999\n\
       - CID={cid}\n\
-      - SOLUTION_NAME={solution}\n\
+      - SOLUTION={solution}\n\
       - DATASET={dataset}\n\
       - NIID={niid}\n\
       - NCLIENTS={nclients}\n\
       - DIRICHLET_ALPHA={alpha}\n\
       - START2SHARE={start2share}\n\
-      - HOMOMORPHIC={homomorphic}\n\
-      - HOMOMORPHIC_TYPE={homomorphic_type}\n\
     volumes:\n\
       - ./client:/client:r\n\
       - ./context:/context:r\n\
@@ -128,18 +125,18 @@ def main():
 
     (opt, args) = parser.parse_args()
 
-    with open(f'{opt.solution}-{opt.dataset}-{opt.clients}.yaml', 'a') as dockercompose_file:
+    with open(f'{opt.solution}-{opt.dataset}-{opt.clients}.yaml', 'w') as dockercompose_file:
         header = f"version: '3'\nservices:\n\n"
 
         dockercompose_file.write(header)
                                     
-        server_str = add_server_info(opt.clients, opt.rounds, opt.solution, opt.dataset, opt.frac_fit, opt.dirichilet, opt.he)
+        server_str = add_server_info(opt.clients, opt.rounds, opt.solution, opt.dataset, opt.frac_fit, opt.dirichilet)
 
         dockercompose_file.write(server_str)
 
         for cid in range(int(opt.clients)):
             client_str = add_client_info(cid, opt.clients, opt.solution, opt.dataset, opt.niid, opt.dirichilet, 
-                                         opt.start2share, opt.he, opt.he_type)    
+                                         opt.start2share)    
 
             dockercompose_file.write(client_str)
             

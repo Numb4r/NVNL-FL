@@ -12,7 +12,7 @@ services:
       - DATASET=MNIST
       - FRAC_FIT=0.2
       - DIRICHLET_ALPHA=0.5
-      - SOLUTION=BatchCrypt
+      - SOLUTION=FedPHE
     volumes:
       - ./server:/server:r
       - ./context:/context:r
@@ -37,7 +37,7 @@ services:
       - NCLIENTS=2
       - DIRICHLET_ALPHA=0.5
       - START2SHARE=2
-      - SOLUTION=BatchCrypt
+      - SOLUTION=FedPHE
     volumes:
       - ./client:/client:r
       - ./context:/context:r
@@ -62,7 +62,7 @@ services:
       - NCLIENTS=2
       - DIRICHLET_ALPHA=0.5
       - START2SHARE=2
-      - SOLUTION=BatchCrypt
+      - SOLUTION=FedPHE
     volumes:
       - ./client:/client:r
       - ./context:/context:r

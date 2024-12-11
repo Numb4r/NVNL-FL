@@ -20,7 +20,7 @@ from client_utils import get_size, packing, cypher_packs, get_topk_mask, decyphe
 from encryption.quantize import quantize, unquantize, batch_padding, unbatching_padding
 from encryption.paillier import PaillierCipher
 
-from literature import fit_ckks, fit_batchcrypt, fit_fedphe, fit_plaintext, he_packs_to_model, he_parameters_to_model
+from literature import fit_ckks, fit_bfv, fit_batchcrypt, fit_fedphe, fit_plaintext, he_packs_to_model, he_parameters_to_model
 # import logging
 # logging.basicConfig(level=logging.DEBUG)
 
@@ -41,8 +41,6 @@ class HEClient(fl.client.NumPyClient):
         # self.packing          = packing
         # self.only_sum         = onlysum
         # self.homomorphic_type = homomorphic_type   
-        
-        self.len_shared_data  = 0                                 
 
         if dataset == 'MNIST' or dataset == 'CIFAR10':
             self.x_train, self.y_train, self.x_test, self.y_test = load_data_flowerdataset(self)
@@ -50,10 +48,12 @@ class HEClient(fl.client.NumPyClient):
             self.x_train, self.y_train, self.x_test, self.y_test = self.load_har(dataset) #self.load_data()
             
         if dataset == 'CIFAR10':
-            self.model  = create_lenet5(self.x_train.shape, len(np.unique(self.y_train)))
+            self.model  = create_lenet5(self.x_train.shape, 10)
 
         else:
-            self.model  = create_dnn(self.x_train.shape, len(np.unique(self.y_train)))
+            self.model  = create_dnn(self.x_train.shape, 10)
+        
+        self.len_shared_data  =  len(flat_parameters(self.model.get_weights()))                               
         
         self.config_solution()
         if self.homomorphic:
@@ -65,9 +65,14 @@ class HEClient(fl.client.NumPyClient):
             with open(f'context/paillier.pkl', 'rb') as file:
                 context = pickle.load(file)    
         else:
-            with open(f'../context/secret.pkl', 'rb') as file:
-                secret = pickle.load(file) 
-                context = ts.context_from(secret["context"])
+            if 'CKKS' == self.homomorphic_type:
+                with open(f'../context/ckks_secret.pkl', 'rb') as file:
+                    secret = pickle.load(file) 
+                    context = ts.context_from(secret["context"])
+            else:
+                with open(f'../context/bfv_secret.pkl', 'rb') as file:
+                    secret = pickle.load(file) 
+                    context = ts.context_from(secret["context"])
                 
         return context
 
@@ -90,6 +95,12 @@ class HEClient(fl.client.NumPyClient):
             self.packing          = False
             self.only_sum         = False
             self.homomorphic_type = 'CKKS'
+            
+        elif str(self.solution).lower() == 'bfv':
+            self.homomorphic      = True
+            self.packing          = False
+            self.only_sum         = True
+            self.homomorphic_type = 'BFV'
         
         elif str(self.solution).lower() == 'batchcrypt':
             self.homomorphic      = True
@@ -113,6 +124,9 @@ class HEClient(fl.client.NumPyClient):
         
         if str(self.solution).lower() == 'ckks':
             fit_msg = fit_ckks(self, parameters, config)
+            
+        elif str(self.solution).lower() == 'bfv':
+            fit_msg = fit_bfv(self, parameters, config)
             
         elif str(self.solution).lower() == 'batchcrypt':
             fit_msg = fit_batchcrypt(self, parameters, config)

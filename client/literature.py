@@ -26,20 +26,32 @@ def he_parameters_to_model(self, config):
             if self.only_sum:
                 he_parameters = np.array(he_parameters) / float(config['total_examples']) 
             
-            
+            print(f'HE PARAMS: {he_parameters[:20]}')
             
             reshaped_parameters = reshape_parameters(self, he_parameters)
             self.model.set_weights(reshaped_parameters)
         
         else:
-            he_parameters        = ts.ckks_vector_from(self.context, config['he'])
-            local_parameters     = self.model.get_weights()
-            decrypted_parameters = he_parameters.decrypt()
-            if self.only_sum:
-                decrypted_parameters  = np.array(decrypted_parameters) / float(config['total_examples'])
+            if 'CKKS' == self.homomorphic_type:
+                he_parameters        = ts.ckks_vector_from(self.context, config['he'])
+                local_parameters     = self.model.get_weights()
+                decrypted_parameters = he_parameters.decrypt()
+                if self.only_sum:
+                    decrypted_parameters  = np.array(decrypted_parameters) / float(config['total_examples'])
+                    
+                reshaped_parameters  = reshape_parameters(self, decrypted_parameters)
+                self.model.set_weights(reshaped_parameters)
                 
-            reshaped_parameters  = reshape_parameters(self, decrypted_parameters)
-            self.model.set_weights(reshaped_parameters)
+            else:
+                he_parameters        = ts.bfv_vector_from(self.context, config['he'])
+                local_parameters     = self.model.get_weights()
+                decrypted_parameters = he_parameters.decrypt()
+                decrypted_parameters = unquantize(decrypted_parameters, 16, self.num_clients)
+                if self.only_sum:
+                    decrypted_parameters  = np.array(decrypted_parameters) / float(config['total_examples'])
+                
+                reshaped_parameters  = reshape_parameters(self, decrypted_parameters)
+                self.model.set_weights(reshaped_parameters)
             
 def he_packs_to_model(self, config):
     packed_parameters  = packing(flat_parameters(self.model.get_weights()))
@@ -97,7 +109,46 @@ def fit_ckks(self, parameters, config):
     fit_msg = self.create_fit_msg(train_time, acc, loss, model_size, he_parameters, topk_mask)
     
     return fit_msg
+
+
+def fit_bfv(self, parameters, config):
+    print(f'tenseal: {self.context}')
+    decypher_time = time.time()
+    if len(config['he']) > 0 and self.homomorphic:
+        he_parameters_to_model(self, config)
+    decypher_time = time.time() - decypher_time
+
+    train_time = time.time()
+    history    = self.model.fit(self.x_train, self.y_train, epochs=1)
+    train_time = time.time() - train_time
+
+    acc        = np.mean(history.history['accuracy'])
+    loss       = np.mean(history.history['loss'])
+
+    trained_parameters = self.model.get_weights()
+    he_parameters      = []
+    cypher_time        = time.time()
     
+
+    if self.homomorphic:
+        flatted_parameters = flat_parameters(trained_parameters) 
+        
+        if self.only_sum:
+            flatted_parameters = np.array(flatted_parameters) #* len(self.x_train)
+            
+        quantized_parameters = quantize(flatted_parameters, 16, self.num_clients)
+        he_parameters        = ts.bfv_vector(self.context, quantized_parameters)
+        he_parameters        = he_parameters.serialize()
+        model_size           = sys.getsizeof(he_parameters)
+        topk_mask            =  '' 
+    
+    cypher_time = time.time() - cypher_time
+    
+    write_train_logs(self, config['round'], loss, acc, model_size, train_time, cypher_time, decypher_time)
+    
+    fit_msg = self.create_fit_msg(train_time, acc, loss, model_size, he_parameters, topk_mask)
+    
+    return fit_msg
     
 def fit_batchcrypt(self, parameters, config):
     
@@ -172,7 +223,7 @@ def fit_fedphe(self, parameters, config):
             packed_parameters = [np.array(pack) * len(self.x_train) for pack in packed_parameters] 
             
         topk_mask          = get_topk_mask(packed_parameters, 0.1)
-        cyphered_packs     = cypher_packs(packed_parameters, topk_mask, self.context)
+        cyphered_packs     = cypher_packs(self, packed_parameters, topk_mask)
         he_parameters      = pickle.dumps(cyphered_packs)
         model_size         = get_size(cyphered_packs)
     

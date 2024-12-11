@@ -8,7 +8,10 @@ def align_packs(self, packed_parameters, mask):
     
     for idx, m in enumerate(mask):
         if m == 1:
-            aligned_pack[idx] = ts.ckks_vector_from(self.context, packed_parameters.pop(0))
+            if self.homomorphic_type == 'CKKS':
+                aligned_pack[idx] = ts.ckks_vector_from(self.context, packed_parameters.pop(0))
+            elif self.homomorphic_type == 'BFV':
+                aligned_pack[idx] = ts.bfv_vector_from(self.context, packed_parameters.pop(0))
             
     return aligned_pack
 
@@ -85,7 +88,11 @@ def get_cyphered_parameters(self, results):
             total_examples  += int(fit_res.num_examples)
             
         else:
-            parameters     = ts.ckks_vector_from(self.context, fit_res.metrics['he']) 
+            if self.homomorphic_type == 'CKKS':
+                parameters     = ts.ckks_vector_from(self.context, fit_res.metrics['he']) 
+            elif self.homomorphic_type == 'BFV':
+                parameters     = ts.bfv_vector_from(self.context, fit_res.metrics['he'])
+                
             parameters_list.append((parameters, int(fit_res.num_examples)))
             total_examples  += int(fit_res.num_examples)
 

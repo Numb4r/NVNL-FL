@@ -27,19 +27,19 @@ def packing(parameters, chunk_size=4096):
         
         start  = pack * chunk_size
         end    = start + chunk_size
-        packet = parameters[start : end]
+        packet = np.array(parameters[start : end])
         
         
         packs.append(packet)
 
     return packs
 
-def cypher_packs(packs, mask, context_client):
+def cypher_packs(self, packs, mask):
     cyphered_packs   = []
-
     for idx, pack in enumerate(packs):        
         if mask[idx] == 1:
-            cypher           = ts.ckks_vector(context_client, pack)
+            
+            cypher          = ts.ckks_vector(self.context, pack)
             serialized_pack = cypher.serialize()
             
             cyphered_packs.append(serialized_pack)
