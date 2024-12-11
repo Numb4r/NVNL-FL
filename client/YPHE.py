@@ -11,6 +11,8 @@ import pickle
 import numpy as np
 import time 
 import sys
+from common.models.CNN import get_model
+from common.common import top_k,load_data,flat_parameters,reshape_parameters,get_latest_created_folder
 # logging.basicConfig(level=logging.DEBUG)
 
 # import logging
@@ -18,32 +20,6 @@ import sys
 from pathlib import Path
 
 LOG_DIR = "logs/"
-def residual_block(x, filters, kernel_size=3, stride=1):
-    # Convolução 1
-    shortcut = x  # A conexão de atalho
-    x = layers.Conv2D(filters, kernel_size=kernel_size, strides=stride, padding="same")(x)
-    x = layers.BatchNormalization()(x)
-    x = layers.ReLU()(x)
-    
-    # Convolução 2
-    x = layers.Conv2D(filters, kernel_size=kernel_size, strides=stride, padding="same")(x)
-    x = layers.BatchNormalization()(x)
-
-    # Somar a entrada com a saída (conexão residual)
-    x = layers.Add()([x, shortcut])
-    x = layers.ReLU()(x)
-    return x
-
-def get_latest_created_folder(directory):
-    # Lista todos os diretórios dentro do caminho especificado
-    folders = [f for f in Path(directory).iterdir() if f.is_dir()]
-    
-    # Se houver diretórios, ordene-os pela data de criação (metadata de criação - st_ctime)
-    if folders:
-        latest_folder = max(folders, key=lambda f: f.stat().st_ctime)
-        return latest_folder
-    else:
-        return None
 
 
 class YPHE_client(fl.client.NumPyClient):
@@ -58,7 +34,13 @@ class YPHE_client(fl.client.NumPyClient):
         self.dirichlet_alpha = dirichlet_alpha
         self.last_parameters = None                                   
 
-        self.x_train, self.y_train, self.x_test, self.y_test = self.load_data()
+        self.x_train, self.y_train, self.x_test, self.y_test = load_data(
+                                                                            niid=self.niid,
+                                                                            num_clients=self.num_clients,
+                                                                            dataset=self.dataset,
+                                                                            dirichlet_alpha=self.dirichlet_alpha,
+                                                                            cid=self.cid
+                                                                            )
         self.model                                           = self.create_model(self.x_train.shape)
         self.context                                         = self.get_client_context()
         self.k = 5
@@ -77,86 +59,9 @@ class YPHE_client(fl.client.NumPyClient):
         return parameters
     
     def create_model(self, input_shape):
-        # model = tf.keras.models.Sequential([
-        #     tf.keras.layers.Input(shape=(28, 28, 1)),
-        #     tf.keras.layers.Flatten(),
-        #     tf.keras.layers.Dense(32, activation='relu'),
-        #     tf.keras.layers.Dense(16,  activation='relu'),
-        #     tf.keras.layers.Dense(10, activation='softmax'),
-
-        # ])
-        model = tf.keras.models.Sequential([
-           layers.Conv2D(32, (3, 3), activation='relu', input_shape=(28, 28, 1)),
-           layers.MaxPooling2D((2, 2)),
-           layers.Conv2D(64, (3, 3), activation='relu'),
-           layers.MaxPooling2D((2, 2)),
-           layers.Conv2D(128, (3, 3), activation='relu'),
-           layers.MaxPooling2D((2, 2)),
-           layers.Flatten(),
-           layers.Dense(128, activation='relu'),
-           layers.Dense(10, activation='softmax') 
-        ])
-        model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
-    
+        model = get_model()
         return model
- 
-    def top_k(self,matrix,k,metric="norm"):
-        layer_metrics = []
-        for i in range(0,len(matrix),2):
-            layer_metric = []
-            if metric == "norm":
-                score = np.linalg.norm(matrix[i])
-            elif metric == "magnitude":
-                score = np.sum(np.abs(matrix[i]))
-            layer_metrics.append((i,score))
-        layer_metrics.sort(key=lambda x:x[1],reverse=True)
-        selected_layers = [layer_metrics[i][0] for i in range(min(k,len(layer_metrics)))]
-        mask = [1 if idx in selected_layers else 0 for idx in range(len(matrix))]
-        return selected_layers,mask
-
-
-    def load_data(self):
-        
-        if self.niid:
-            partitioner_train = DirichletPartitioner(num_partitions=self.num_clients, partition_by="label",
-                                    alpha=self.dirichlet_alpha, min_partition_size=100,
-                                    self_balancing=False)
-        else:
-            partitioner_train =  IidPartitioner(num_partitions=self.num_clients)
-        
-        fds               = FederatedDataset(dataset=self.dataset, partitioners={"train": partitioner_train})
-        train             = fds.load_partition(self.cid).with_format("numpy")
-        partitioner_test  = IidPartitioner(num_partitions=self.num_clients)
-        fds_eval          = FederatedDataset(dataset=self.dataset, partitioners={"test": partitioner_test})
-        test              = fds_eval.load_partition(self.cid).with_format("numpy")
-
-        return train['image']/255.0, train['label'], test['image']/255.0, test['label']
-
-    def flat_parameters(self, parameters):
-        flat_params = []
-
-        for param in parameters:
-            flat_params.extend(param.flatten())
-
-        return flat_params
-
-    def reshape_parameters(self,decrypted_parameters,matrix):
-        reshaped_parameters = []
-
-        for c in matrix:
-            c = np.array(c)
-            reshaped_parameters.append(np.reshape(decrypted_parameters[:c.size], c.shape))
-            decrypted_parameters = decrypted_parameters[c.size:]
-
-        return reshaped_parameters
-    # def reshape_parameters(self, decrypted_parameters):
-    #     reshaped_parameters = []
-
-    #     for layer in self.model.get_weights():
-    #         reshaped_parameters.append(np.reshape(decrypted_parameters[:layer.size], layer.shape))
-    #         decrypted_parameters = decrypted_parameters[layer.size:]
-
-    #     return reshaped_parameters
+    
     def set_parameters(self,parameters,config):
         
         if len(config['he']) > 0:
@@ -175,7 +80,7 @@ class YPHE_client(fl.client.NumPyClient):
             for idx in range(len(self.mask)):
                 if self.mask[idx] == 1:
                     decrypt_layer =ts.ckks_vector_from(self.context,he_parameters[idx]).decrypt()
-                    reshaped = self.reshape_parameters(decrypt_layer,local_parameters[idx])
+                    reshaped = reshape_parameters(decrypt_layer,local_parameters[idx])
                     local_parameters[idx] = reshaped
                 local_parameters[idx] = np.array(local_parameters[idx])
                     
@@ -219,10 +124,10 @@ class YPHE_client(fl.client.NumPyClient):
         for idx,layer in enumerate(self.model.layers):    
             weight = layer.get_weights()
             if weight:
-                flat_parameters = self.flat_parameters(weight[0])
-                model_layers.append(flat_parameters) # pesos
+                flat = flat_parameters(weight[0])
+                model_layers.append(flat) # pesos
                 model_layers.append(weight[1]) # bias
-        selected_layers,self.mask = self.top_k(model_layers,self.k,metric="norm")
+        selected_layers,self.mask = top_k(model_layers,self.k,metric="norm")
         selected_layers = sorted(selected_layers)
         
 
@@ -303,7 +208,7 @@ class YPHE_client(fl.client.NumPyClient):
             for idx in range(len(self.mask)):
                 if self.mask[idx] == 1:
                     decrypt_layer = ts.ckks_vector_from(self.context,he_parameters[idx]).decrypt()
-                    reshaped = self.reshape_parameters(decrypt_layer,local_parameters[idx])
+                    reshaped = reshape_parameters(decrypt_layer,local_parameters[idx])
                     local_parameters[idx] = reshaped
                 local_parameters[idx] = np.array(local_parameters[idx])
             self.model.set_weights(local_parameters)
