@@ -6,8 +6,8 @@ SOLS = ['BFV', 'CKKS', 'BatchCrypt', 'FedPHE', 'plaintext']
 COMPOSES = [
     # 'BFV-MNIST-10.yaml',
     # 'CKKS-MNIST-10.yaml',
-    'FedPHE-MNIST-10.yaml',
-    'plaintext-MNIST-10.yaml',
+    # 'FedPHE-MNIST-10.yaml',
+    # 'plaintext-MNIST-10.yaml',
     'BatchCrypt-MNIST-10.yaml',
 ]
 
