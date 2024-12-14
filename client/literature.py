@@ -182,11 +182,12 @@ def fit_batchcrypt(self, parameters, config):
         quan_param    = batch_padding(quan_param, self.context.key_length, elem_bits, batch_size=batch_size)
 
         he_parameters = self.context.encrypt(quan_param)
+        print(f'HE PARAMS antes dumps: {sys.getsizeof(he_parameters)}')
         he_parameters = pickle.dumps(he_parameters)
         model_size    = sys.getsizeof(he_parameters)
+        print(f'HE PARAMS depois dumps: {sys.getsizeof(he_parameters)}')
         topk_mask     =  '' 
         self.len_shared_data = len(flatted_parameters)
-        print(f'CIFREI {len(he_parameters)}')
         
     cypher_time = time.time() - cypher_time
     
@@ -238,9 +239,9 @@ def fit_fedphe(self, parameters, config):
 
 def fit_plaintext(self, parameters, config):
     
-    decypher_time = time.time()
+    decypher_time = 0
     self.model.set_weights(parameters)
-    decypher_time = time.time() - decypher_time
+    
 
     train_time = time.time()
     history    = self.model.fit(self.x_train, self.y_train, epochs=1)
@@ -251,14 +252,13 @@ def fit_plaintext(self, parameters, config):
 
     trained_parameters = self.model.get_weights()
     he_parameters      = []
-    cypher_time         = time.time()
+    
     
     flatted_parameters  = flat_parameters(trained_parameters)
-    temp_buf            = pickle.dumps(flatted_parameters)
-    model_size          = sys.getsizeof(temp_buf)
+    # temp_buf            = pickle.dumps(flatted_parameters)
+    model_size          = sys.getsizeof(flatted_parameters)
     topk_mask           =  '' 
-    
-    cypher_time = time.time() - cypher_time
+    cypher_time         = 0
     
     write_train_logs(self, config['round'], loss, acc, model_size, train_time, cypher_time, decypher_time)
     
