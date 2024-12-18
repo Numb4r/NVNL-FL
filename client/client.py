@@ -14,12 +14,16 @@ import sys
 import time
 
 from models import create_cnn, create_dnn, create_lenet5, reshape_parameters, flat_parameters
-from client_logs import write_train_logs, write_evaluate_logs
+from client.common.client_logs import write_train_logs, write_evaluate_logs
 from client_utils import get_size, packing, cypher_packs, get_topk_mask, decypher_packs, flat_packs, remove_padding
 
 from encryption.quantize import quantize, unquantize, batch_padding, unbatching_padding
 from encryption.paillier import PaillierCipher
-
+from clients.plaintext import PlainTextClient
+from clients.batchcrypt import BatchcryptClient
+from clients.fedphe import FedPHEClient
+from clients.bfv import BFVClient
+from clients.ckks import CKKSClient
 from literature import fit_ckks, fit_bfv, fit_batchcrypt, fit_fedphe, fit_plaintext, he_packs_to_model, he_parameters_to_model
 # import logging
 # logging.basicConfig(level=logging.DEBUG)
@@ -201,20 +205,34 @@ class HEClient(fl.client.NumPyClient):
         return fit_msg
         
 def main():
+    solutions_client = {
+        "plaintext": PlainTextClient,
+        'batchcrypt':  BatchcryptClient,
+        'fedphe':FedPHEClient,
+        'bfv':BFVClient,
+        'ckks':CKKSClient
+    }
     
-    client =  HEClient(
-                        cid             = int(os.environ['CID']), 
-                        niid            = os.environ['NIID'] == 'True', 
-                        dataset         = os.environ['DATASET'], 
-                        num_clients     = int(os.environ['NCLIENTS']), 
-                        dirichlet_alpha = float(os.environ['DIRICHLET_ALPHA']),
-                        start2share     = int(os.environ['START2SHARE']),
-                        solution        = str(os.environ['SOLUTION'])
+    # client =  HEClient(
+    cid             = int(os.environ['CID']), 
+    niid            = os.environ['NIID'] == 'True', 
+    dataset         = os.environ['DATASET'], 
+    num_clients     = int(os.environ['NCLIENTS']), 
+    dirichlet_alpha = float(os.environ['DIRICHLET_ALPHA']),
+    start2share     = int(os.environ['START2SHARE']),
+    solution        = str(os.environ['SOLUTION'])
+    client = solutions_client[solution](cid,
+                                        niid,
+                                        dataset,
+                                        num_clients,
+                                        dirichlet_alpha,
+                                        start2share)
+
                         # homomorphic     = os.environ['HOMOMORPHIC'] == 'True',
                         # packing         = os.environ['PACKING'] == 'True',
                         # onlysum         = os.environ['ONLYSUM'] == 'True',
                         # homomorphic_type= str(os.environ['HOMOMORPHIC_TYPE'])
-                        )
+                        # )
         
     fl.client.start_numpy_client(server_address=os.environ['SERVER_IP'], 
                                 client=client)
