@@ -7,7 +7,7 @@ import tenseal as ts
 
 from models import flat_parameters, reshape_parameters
 from client_logs import write_train_logs, write_evaluate_logs
-from client_utils import get_size, packing, cypher_packs, get_topk_mask, decypher_packs, flat_packs, remove_padding
+from client_utils import get_size, packing, cypher_packs, get_topk_mask, decypher_packs, flat_packs, remove_padding,get_pondering_random_mask,get_robin_round_mask,get_slice_window_mask
 
 from encryption.quantize import quantize, unquantize, batch_padding, unbatching_padding
 
@@ -223,7 +223,14 @@ def fit_fedphe(self, parameters, config):
         if self.only_sum:
             packed_parameters = [np.array(pack) * len(self.x_train) for pack in packed_parameters] 
             
-        topk_mask          = get_topk_mask(packed_parameters, 0.1)
+        # topk_mask          = get_topk_mask(packed_parameters, 0.8)
+        # topk_mask          = get_robin_round_mask(round=config['round'],packs=packed_parameters,size_window=0.8,percentage=True)
+        # topk_mask          = get_slice_window_mask(round=config['round'],packs=packed_parameters,size_window=0.8,stride=0.8,percentage=True)
+
+        if len(self.weights_packs ) == 0 :
+            self.weights_packs = np.ones(len(packed_parameters))
+        topk_mask          = get_pondering_random_mask(packs=packed_parameters,k=0.1,weights_packs=self.weights_packs,percentage=True)
+
         cyphered_packs     = cypher_packs(self, packed_parameters, topk_mask)
         he_parameters      = pickle.dumps(cyphered_packs)
         model_size         = get_size(cyphered_packs)

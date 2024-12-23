@@ -56,6 +56,7 @@ class HEClient(fl.client.NumPyClient):
         self.dataset_manager  = ManageDatasets(self.cid)
         self.start2share      = start2share
         self.solution         = str(solution).lower()
+        self.weights_packs    = []
         # self.homomorphic      = homomorphic
         # self.packing          = packing
         # self.only_sum         = onlysum
@@ -179,8 +180,8 @@ class HEClient(fl.client.NumPyClient):
             'accuracy': acc,
             'loss'    : loss
         }
-        with open(f'{self.log_folder}/client_{self.cid}_eval.csv', 'a') as f:
-            f.write(f"{acc},{loss}\n")
+        # with open(f'{self.log_folder}/client_{self.cid}_eval.csv', 'a') as f:
+        #     f.write(f"{acc},{loss}\n")
 
 
         return loss, len(self.x_test), eval_msg

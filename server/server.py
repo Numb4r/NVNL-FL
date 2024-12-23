@@ -237,8 +237,8 @@ class HEServer(fl.server.strategy.FedAvg):
         )
 
         print(f"Round {server_round} aggregated loss: {loss_aggregated} aggregated accuracy: {sum(accuracies)/len(accuracies)}")
-        with open(f'{self.log_folder}/server_evaluate.csv', 'a') as f:
-            f.write(f"{sum(accuracies)/len(accuracies)},{loss_aggregated}\n")
+        # with open(f'{self.log_folder}/server_evaluate.csv', 'a') as f:
+        #     f.write(f"{sum(accuracies)/len(accuracies)},{loss_aggregated}\n")
 
         return loss_aggregated, {}
     
