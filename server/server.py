@@ -27,6 +27,7 @@ class HEServer(fl.server.strategy.FedAvg):
         self.agg_mask        = ''
         self.selection_time  = 0
         self.total_examples  = 0
+        self.homomorphic_type = ''
         # self.homomorphic_type= homomorphic_type
         # self.homomorphic     = homomorphic
         # self.packing         = packing
@@ -59,6 +60,11 @@ class HEServer(fl.server.strategy.FedAvg):
             self.packing          = False
             
         elif str(self.solution).lower() == 'fedphe':
+            self.homomorphic      = True
+            self.homomorphic_type = 'CKKS'
+            self.onlysum          = False
+            self.packing          = True
+        elif str(self.solution).lower() == 'yphe':
             self.homomorphic      = True
             self.homomorphic_type = 'CKKS'
             self.onlysum          = False
@@ -237,8 +243,8 @@ class HEServer(fl.server.strategy.FedAvg):
         )
 
         print(f"Round {server_round} aggregated loss: {loss_aggregated} aggregated accuracy: {sum(accuracies)/len(accuracies)}")
-        with open(f'{self.log_folder}/server_evaluate.csv', 'a') as f:
-            f.write(f"{sum(accuracies)/len(accuracies)},{loss_aggregated}\n")
+        # with open(f'{self.log_folder}/server_evaluate.csv', 'a') as f:
+        #     f.write(f"{sum(accuracies)/len(accuracies)},{loss_aggregated}\n")
 
         return loss_aggregated, {}
     

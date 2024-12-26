@@ -3,11 +3,11 @@ import pickle
 import numpy as np
 import sys
 import tenseal as ts
-
+import math
 
 from models import flat_parameters, reshape_parameters
 from client_logs import write_train_logs, write_evaluate_logs
-from client_utils import get_size, packing, cypher_packs, get_topk_mask, decypher_packs, flat_packs, remove_padding
+from client_utils import get_size, packing, cypher_packs, get_topk_mask, decypher_packs, flat_packs, remove_padding,reshape_model,packing_yphe,remove_padding_yphe
 
 from encryption.quantize import quantize, unquantize, batch_padding, unbatching_padding
 
@@ -71,6 +71,32 @@ def he_packs_to_model(self, config):
     reshaped_parameters = reshape_parameters(self, flatted_packs)
     self.model.set_weights(reshaped_parameters)
 
+def he_packs_to_model_yphe(self,config):
+    packed_parameters = []
+    for idx,layer in enumerate(self.model.layers):    
+        weight = layer.get_weights()
+        if weight:
+            flat = flat_parameters(weight[0])
+            packed_parameters.append(flat) # pesos
+            packed_parameters.append(weight[1]) # bias
+
+    cyphered_packs     = pickle.loads(config['he'])
+    decyphered_pack    = decypher_packs(cyphered_packs, self.context)
+    aggredated_mask    = pickle.loads(config['mask'])
+    for idx_mask, m in enumerate(aggredated_mask):
+        
+        if m > 0:
+            if self.only_sum:
+                packed_parameters[idx_mask] = np.array(decyphered_pack.pop(0)) / m
+            else:
+                packed_parameters[idx_mask] = decyphered_pack.pop(0)
+    
+            
+            packed_parameters[idx_mask] = remove_padding_yphe(packed_parameters[idx_mask],packed_parameters[idx_mask])
+    
+    flatted_packs       = flat_packs(packed_parameters)
+    reshaped = reshape_parameters(self,flatted_packs)
+    self.model.set_weights(reshaped)
 
 def fit_ckks(self, parameters, config):
     print(f'tenseal: {self.context}')
@@ -149,7 +175,50 @@ def fit_bfv(self, parameters, config):
     fit_msg = self.create_fit_msg(train_time, acc, loss, model_size, he_parameters, topk_mask)
     
     return fit_msg
+def fit_yphe(self,parameters,config):
     
+    decypher_time = time.time()
+    if len(config['he']) > 0 and self.homomorphic:
+        if self.packing:
+            he_packs_to_model_yphe(self,config)
+    decypher_time = time.time() - decypher_time
+    
+    train_time = time.time()
+    history = self.model.fit(self.x_train, self.y_train, epochs=1)
+    train_time= time.time() - train_time
+
+    acc     = np.mean(history.history['accuracy'])
+    loss    = np.mean(history.history['loss'])
+    
+    model_layers = []
+    
+
+
+    for idx,layer in enumerate(self.model.layers):    
+        weight = layer.get_weights()
+        if weight:
+            flat = flat_parameters(weight[0])
+            model_layers.append(flat) # pesos
+            model_layers.append(weight[1]) # bias
+    mask = get_topk_mask(model_layers, 1)
+    print(f"\n\n\t\tmask:{mask}")
+
+    # selected_layers = sorted(selected_layers)
+
+    
+    cypher_time = time.time()
+    
+    cyphered_packs = cypher_packs(self,model_layers,mask)
+    
+    he_parameters = pickle.dumps(cyphered_packs)
+    model_size =  get_size(cyphered_packs)
+    cypher_time = time.time() - cypher_time
+
+    write_train_logs(self, config['round'], loss, acc, model_size, train_time, cypher_time, decypher_time)
+    fit_msg = self.create_fit_msg(train_time, acc, loss, model_size, he_parameters, mask)
+
+
+    return fit_msg
 def fit_batchcrypt(self, parameters, config):
     
     decypher_time = time.time()

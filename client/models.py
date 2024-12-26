@@ -90,3 +90,21 @@ def reshape_parameters(self, decrypted_parameters):
         decrypted_parameters = decrypted_parameters[layer.size:]
 
     return reshaped_parameters
+def reshape_model(flatted_packs,a,sentinel=0):
+    model =[]
+    # print(a)
+    
+    if type(a) != int and type(a)!=float:
+        # print(f'len:{len(a)}')
+        for item in a:
+            # print(f'item {item},  {type(item)},sentinel {sentinel}')
+            
+            m,sentinel=reshape_model(flatted_packs,item,sentinel)
+            # print(sentinel)
+            model.append(m)
+    else:
+    
+        sentinel+=1 
+        # print(f'a: {a}')
+        return flatted_packs[sentinel-1],sentinel
+    return model,sentinel

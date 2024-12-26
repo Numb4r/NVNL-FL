@@ -20,7 +20,7 @@ from client_utils import get_size, packing, cypher_packs, get_topk_mask, decyphe
 from encryption.quantize import quantize, unquantize, batch_padding, unbatching_padding
 from encryption.paillier import PaillierCipher
 
-from literature import fit_ckks, fit_bfv, fit_batchcrypt, fit_fedphe, fit_plaintext, he_packs_to_model, he_parameters_to_model
+from literature import fit_ckks, fit_bfv, fit_batchcrypt, fit_fedphe, fit_plaintext, fit_yphe, he_packs_to_model,he_packs_to_model_yphe, he_parameters_to_model
 # import logging
 # logging.basicConfig(level=logging.DEBUG)
 
@@ -132,12 +132,16 @@ class HEClient(fl.client.NumPyClient):
             self.homomorphic_type = 'CKKS'
             self.only_sum         = False
             self.packing          = True
-            
+        elif str(self.solution).lower() == 'yphe':
+            self.homomorphic      = True 
+            self.only_sum         = False
+            self.homomorphic_type = 'CKKS'
+            self.packing          = True
         elif str(self.solution).lower() == 'plaintext':
             self.homomorphic      = False
             self.only_sum         = False
             self.packing          = False
-            self.homomorphic_type = 'None'       
+            self.homomorphic_type = 'None'
 
     def fit(self, parameters, config):
         
@@ -152,6 +156,8 @@ class HEClient(fl.client.NumPyClient):
             
         elif str(self.solution).lower() == 'fedphe':
             fit_msg = fit_fedphe(self, parameters, config)
+        elif str(self.solution).lower() == 'yphe':
+            fit_msg = fit_yphe(self,parameters,config)
             
         elif str(self.solution).lower() == 'plaintext':
             fit_msg = fit_plaintext(self, parameters, config)
@@ -162,7 +168,10 @@ class HEClient(fl.client.NumPyClient):
         decypher_time = time.time()
         if len(config['he']) > 0 and self.homomorphic:
             if self.packing:
-                he_packs_to_model(self, config)
+                if str(self.solution).lower() == 'yphe':
+                    he_packs_to_model_yphe(self,config)
+                else: 
+                    he_packs_to_model(self, config)
                 
             else:
                 he_parameters_to_model(self, config)
@@ -179,8 +188,8 @@ class HEClient(fl.client.NumPyClient):
             'accuracy': acc,
             'loss'    : loss
         }
-        with open(f'{self.log_folder}/client_{self.cid}_eval.csv', 'a') as f:
-            f.write(f"{acc},{loss}\n")
+        # with open(f'{self.log_folder}/client_{self.cid}_eval.csv', 'a') as f:
+        #     f.write(f"{acc},{loss}\n")
 
 
         return loss, len(self.x_test), eval_msg

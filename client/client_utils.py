@@ -1,3 +1,4 @@
+import math
 import sys
 import tenseal as ts
 import numpy as np
@@ -84,3 +85,50 @@ def decypher_packs(packed_parameters, context):
         decrypted_parameters.append(ts.ckks_vector_from(context, pack).decrypt())
         
     return decrypted_parameters
+def reshape_model(flatted_packs,a,sentinel=0):
+    model =[]
+    # print(a)
+    
+    if type(a) != int and type(a)!=float:
+        # print(f'len:{len(a)}')
+        for item in a:
+            # print(f'item {item},  {type(item)},sentinel {sentinel}')
+            
+            m,sentinel=reshape_model(flatted_packs,item,sentinel)
+            # print(sentinel)
+            model.append(m)
+    else:
+    
+        sentinel+=1 
+        # print(f'a: {a}')
+        return flatted_packs[sentinel-1],sentinel
+    return model,sentinel
+
+def packing_yphe(model_layers,chunk_size=-1):
+
+    packs = []
+
+    for idx,layer in enumerate(model_layers):
+        weight = layer
+        
+        
+        for w in weight:
+            flat = flat_parameters(w)
+            total_parameters = len(flat)
+            current_chunk_size = chunk_size if chunk_size != -1 else total_parameters            
+            number_packs = math.ceil(total_parameters / current_chunk_size )
+            for pack in range(number_packs):
+                start = pack * current_chunk_size
+                end = start + current_chunk_size
+                
+            
+                packs.append(flat[start:end])
+            
+            if len(packs[-1]) < chunk_size:
+                packs[-1].extend([0] * (chunk_size - len(packs[-1])))
+            
+    return packs
+def remove_padding_yphe(layer,target):
+    
+    total_parameters = len(target)
+    return layer[:total_parameters]
