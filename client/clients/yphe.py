@@ -3,8 +3,10 @@ import numpy as np
 import math
 import sys
 import pickle
+import tenseal as ts
 from base_client import BaseNumpyClient
 from client.common.utils import flat_parameters, cypher_packs,get_size,create_fit_msg, flat_packs, decypher_packs, remove_padding,reshape_parameters
+from client.common.ranking import topk
 from client.common.client_logs import write_evaluate_logs,write_train_logs
 def packing(model_layers,chunk_size=-1):
     packs = []
@@ -36,7 +38,24 @@ def remove_padding(layer,target):
 def remove_padding(layer,target):
     total_parameters = len(target)
     return layer[:total_parameters]
-
+def reshape_model(flatted_packs,a,sentinel=0):
+    model =[]
+    # print(a)
+    
+    if type(a) != int and type(a)!=float:
+        # print(f'len:{len(a)}')
+        for item in a:
+            # print(f'item {item},  {type(item)},sentinel {sentinel}')
+            
+            m,sentinel=reshape_model(flatted_packs,item,sentinel)
+            # print(sentinel)
+            model.append(m)
+    else:
+    
+        sentinel+=1 
+        # print(f'a: {a}')
+        return flatted_packs[sentinel-1],sentinel
+    return model,sentinel
 class YPHEClient(BaseNumpyClient):
     def __init__(self, cid, niid, dataset, num_clients, dirichlet_alpha, dataset_magager,chunk_size=-1,only_sum=False):
         super().__init__(cid, niid, dataset, num_clients, dirichlet_alpha, dataset_magager)
@@ -44,8 +63,42 @@ class YPHEClient(BaseNumpyClient):
         self.only_sum = only_sum
         self.chunk_size=chunk_size
     def fit(self, parameters, config):
-        fit_msg = create_fit_msg()
+        
+        decypher_time = time.time()
+        self.set_parameters(parameters,config)
+        decypher_time = time.time() - decypher_time
+        
+        train_time = time.time()
+        history = self.model.fit(self.x_train, self.y_train, epochs=1)
+        train_time= time.time() - train_time
+
+        acc     = np.mean(history.history['accuracy'])
+        loss    = np.mean(history.history['loss'])
+        
+        model_layers = []
+        
+
+
+        for idx,layer in enumerate(self.model.layers):    
+            weight = layer.get_weights()
+            if weight:
+                flat = flat_parameters(weight[0])
+                model_layers.append(flat) # pesos
+                model_layers.append(weight[1]) # bias
+        mask = topk(model_layers, 0.1)
+
+        # selected_layers = sorted(selected_layers)
+
+        send_layers = []
+        cypher_time = time.time()
+        cyphered_packs = cypher_packs(self,model_layers,mask)
+        he_parameters = pickle.dumps(cyphered_packs)
+        model_size =  get_size(cypher_packs)
+        cypher_time = time.time() - cypher_time
+
         write_train_logs(config['round'], self.cid, loss, acc, model_size, train_time, cypher_time, decypher_time, self.dataset, self.solution)
+        fit_msg = create_fit_msg(train_time, acc, loss, model_size, he_parameters, mask)
+
 
         return [],len(self.x_train), fit_msg
     
@@ -69,6 +122,8 @@ class YPHEClient(BaseNumpyClient):
         decyphered_pack    = decypher_packs(cyphered_packs, self.context)
         aggredated_mask    = pickle.loads(config['mask'])
         
+        flatted_packs       = flat_packs(packed_parameters)
+        weight = packing(self.model,-1)
         for idx_mask, m in enumerate(aggredated_mask):
             
             if m > 0:
@@ -81,14 +136,15 @@ class YPHEClient(BaseNumpyClient):
                 packed_parameters[idx_mask] = remove_padding(packed_parameters[idx_mask],weight[idx_mask])
 
 
-        flatted_packs       = flat_packs(packed_parameters)
         reshaped_parameters =[]
-        for idx,layer in enumerate(self.model.layers):
-            # print(layer)
-            cut = len(flat_parameters(layer))
-            # print(f'cut {cut}')
-            reshaped_parameters.append(reshape_parameters(flatted_packs[idx*cut:idx*cut+cut],layer))
-        self.model.set_weights(reshaped_parameters)
+        reshaped,_ = reshape_model(flatted_packs, self.model)
+
+        # for idx,layer in enumerate(self.model.layers):
+        #     # print(layer)
+        #     cut = len(flat_parameters(layer))
+        #     # print(f'cut {cut}')
+        #     reshaped_parameters.append(reshape_parameters(flatted_packs[idx*cut:idx*cut+cut],layer))
+        self.model.set_weights(reshaped)
 
 
 # he = config['he']
