@@ -194,7 +194,7 @@ diretorio_csv = "logs/"
 
 def main():
     create_compose()
-    run_compose()
+    # run_compose()
     # verify()
     # verificar_csvs_em_subdiretorio("logs")
     faltantes = verificar_yaml_faltantes(diretorio_yaml, diretorio_csv)
