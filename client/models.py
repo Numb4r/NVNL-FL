@@ -1,5 +1,82 @@
 import tensorflow as tf
 import numpy as np
+from tensorflow.keras import layers, models
+
+def CNN_fmnist_tf(input_shape, num_classes):
+    model = models.Sequential()
+    
+    # Layer 1
+    model.add(layers.Conv2D(16, kernel_size=(5, 5), padding='same', input_shape=(input_shape[1:])))
+    model.add(layers.BatchNormalization())
+    model.add(layers.ReLU())
+    model.add(layers.MaxPooling2D(pool_size=(2, 2)))
+    
+    # Layer 2
+    model.add(layers.Conv2D(32, kernel_size=(3, 3)))
+    model.add(layers.BatchNormalization())
+    model.add(layers.ReLU())
+    
+    # Layer 3
+    model.add(layers.Conv2D(64, kernel_size=(3, 3)))
+    model.add(layers.BatchNormalization())
+    model.add(layers.ReLU())
+    model.add(layers.MaxPooling2D(pool_size=(2, 2)))
+    
+    # Flatten and Fully Connected Layer
+    model.add(layers.Flatten())
+    model.add(layers.Dense(num_classes))
+    model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+
+    return model
+
+def residual_block(inputs, filters, stride=1):
+    x = layers.Conv2D(filters, kernel_size=3, strides=stride, padding="same", use_bias=False)(inputs)
+    x = layers.BatchNormalization()(x)
+    x = layers.ReLU()(x)
+
+    x = layers.Conv2D(filters, kernel_size=3, strides=1, padding="same", use_bias=False)(x)
+    x = layers.BatchNormalization()(x)
+
+    if stride != 1 or inputs.shape[-1] != filters:
+        shortcut = layers.Conv2D(filters, kernel_size=1, strides=stride, padding="same", use_bias=False)(inputs)
+        shortcut = layers.BatchNormalization()(shortcut)
+    else:
+        shortcut = inputs
+
+    x = layers.Add()([x, shortcut])
+    x = layers.ReLU()(x)
+    return x
+
+def ResNet20(input_shape, num_classes):
+    inputs = tf.keras.Input(shape=(input_shape[1:]))
+
+    # Initial Conv Layer
+    x = layers.Conv2D(16, kernel_size=3, strides=1, padding="same", use_bias=False)(inputs)
+    x = layers.BatchNormalization()(x)
+    x = layers.ReLU()(x)
+
+    # First stack of residual blocks (16 filters)
+    for _ in range(3):
+        x = residual_block(x, 16)
+
+    # Second stack of residual blocks (32 filters)
+    x = residual_block(x, 32, stride=2)
+    for _ in range(2):
+        x = residual_block(x, 32)
+
+    # Third stack of residual blocks (64 filters)
+    x = residual_block(x, 64, stride=2)
+    for _ in range(2):
+        x = residual_block(x, 64)
+
+    # Global Average Pooling and Dense Layer
+    x = layers.GlobalAveragePooling2D()(x)
+    outputs = layers.Dense(num_classes, activation="softmax")(x)
+
+    model = tf.keras.Model(inputs, outputs)
+    model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+
+    return model
 
 def create_dnn(input_shape, num_classes):
     
@@ -20,7 +97,7 @@ def create_dnn(input_shape, num_classes):
 def create_lenet5(input_shape, num_classes):
     model = tf.keras.models.Sequential()
     
-    model.add(tf.keras.layers.Conv2D(6, kernel_size=(5, 5), strides=(1, 1), activation='tanh', input_shape=input_shape[1:], padding="same"))
+    model.add(tf.keras.layers.Conv2D(6, kernel_size=(5, 5), strides=(1, 1), activation='tanh', input_shape=(*input_shape[1:],1), padding="same"))
     model.add(tf.keras.layers.AveragePooling2D(pool_size=(2, 2), strides=(2, 2), padding='valid'))
     model.add(tf.keras.layers.Conv2D(16, kernel_size=(5, 5), strides=(1, 1), activation='tanh', padding='valid'))
     model.add(tf.keras.layers.AveragePooling2D(pool_size=(2, 2), strides=(2, 2), padding='valid'))
@@ -37,7 +114,7 @@ def create_cnn(input_shape, num_classes):
     model = tf.keras.models.Sequential()
     
    # Convolutional Block 1
-    model.add(tf.keras.layers.Conv2D(64, (3, 3), padding='same', activation='relu', input_shape=input_shape[1:]))
+    model.add(tf.keras.layers.Conv2D(64, (3, 3), padding='same', activation='relu', input_shape=input_shape))
     model.add(tf.keras.layers.BatchNormalization())
     model.add(tf.keras.layers.Conv2D(64, (3, 3), padding='same', activation='relu'))
     model.add(tf.keras.layers.BatchNormalization())

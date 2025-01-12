@@ -13,7 +13,7 @@ import tracemalloc
 import sys
 import time
 
-from models import create_cnn, create_dnn, create_lenet5, reshape_parameters, flat_parameters
+from models import create_cnn, create_dnn, create_lenet5, reshape_parameters, flat_parameters,ResNet20,CNN_fmnist_tf
 from client_logs import write_train_logs, write_evaluate_logs
 from client_utils import get_size, packing, cypher_packs, get_topk_mask, decypher_packs, flat_packs, remove_padding
 
@@ -45,7 +45,7 @@ def get_latest_created_folder(directory):
 
 class HEClient(fl.client.NumPyClient):
     def __init__(self, cid, niid, dataset, num_clients, 
-                 dirichlet_alpha, start2share, solution):
+                 dirichlet_alpha, start2share, solution,percentage,technique):
         
         self.cid              = int(cid)
         self.dataset          = dataset
@@ -57,21 +57,28 @@ class HEClient(fl.client.NumPyClient):
         self.start2share      = start2share
         self.solution         = str(solution).lower()
         self.weights_packs    = []
+        self.technique        = technique
+        self.percentage       = percentage
+        self.dirichlet_alpha = dirichlet_alpha
         # self.homomorphic      = homomorphic
         # self.packing          = packing
         # self.only_sum         = onlysum
         # self.homomorphic_type = homomorphic_type   
 
-        if dataset == 'MNIST' or dataset == 'CIFAR10':
+        if dataset == 'MNIST' or dataset == 'CIFAR10' or dataset == "FASHION_MNIST":
             self.x_train, self.y_train, self.x_test, self.y_test = load_data_flowerdataset(self)
         else:
             self.x_train, self.y_train, self.x_test, self.y_test = self.load_har(dataset) #self.load_data()
-            
-        if dataset == 'CIFAR10':
-            self.model  = create_lenet5(self.x_train.shape, 10)
-
+        print("\n\n\n\n\nSHAPE:",self.x_train.shape)
+        
+        if dataset == 'FASHION_MNIST':
+            self.model = create_lenet5(self.x_train.shape,10)
+            self.model_name = "lenet5"
+        elif dataset == "MNIST":
+            self.model = create_dnn(self.x_train.shape,10)
+            self.model_name = "DNN"
         else:
-            self.model  = create_dnn(self.x_train.shape, 10)
+            return
         
         self.len_shared_data  =  len(flat_parameters(self.model.get_weights()))                               
         
@@ -210,7 +217,12 @@ def main():
                         num_clients     = int(os.environ['NCLIENTS']), 
                         dirichlet_alpha = float(os.environ['DIRICHLET_ALPHA']),
                         start2share     = int(os.environ['START2SHARE']),
-                        solution        = str(os.environ['SOLUTION'])
+                        solution        = str(os.environ['SOLUTION']),        
+                        percentage      = float(os.environ['PERCENTAGE']),
+                        technique       = str(os.environ["TECHNIQUE"]),
+                                        #   "robin_round"
+                                        #   "slided_window"
+                                        #   "weight_random"
                         # homomorphic     = os.environ['HOMOMORPHIC'] == 'True',
                         # packing         = os.environ['PACKING'] == 'True',
                         # onlysum         = os.environ['ONLYSUM'] == 'True',

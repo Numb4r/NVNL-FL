@@ -222,16 +222,21 @@ def fit_fedphe(self, parameters, config):
         
         if self.only_sum:
             packed_parameters = [np.array(pack) * len(self.x_train) for pack in packed_parameters] 
-            
-        # topk_mask          = get_topk_mask(packed_parameters, 0.8)
-        # topk_mask          = get_robin_round_mask(round=config['round'],packs=packed_parameters,size_window=0.8,percentage=True)
-        # topk_mask          = get_slice_window_mask(round=config['round'],packs=packed_parameters,size_window=0.8,stride=0.8,percentage=True)
 
-        if len(self.weights_packs ) == 0 :
-            self.weights_packs = np.ones(len(packed_parameters))
-        topk_mask          = get_pondering_random_mask(packs=packed_parameters,k=0.1,weights_packs=self.weights_packs,percentage=True)
+        if self.technique == "topk": 
+            mask          = get_topk_mask(packed_parameters, self.percentage)
+        elif self.technique == "robin_round" :    
+            mask          = get_robin_round_mask(round=config['round'],packs=packed_parameters,size_window=self.percentage,percentage=True)
 
-        cyphered_packs     = cypher_packs(self, packed_parameters, topk_mask)
+        elif self.technique == "slided_window":
+            mask          = get_slice_window_mask(round=config['round'],packs=packed_parameters,size_window=self.percentage,stride=0.5,percentage=True)
+        elif self.technique == "weight_random":
+            if len(self.weights_packs ) == 0 :
+                self.weights_packs = np.ones(len(packed_parameters))
+            mask          = get_pondering_random_mask(packs=packed_parameters,k=self.percentage,weights_packs=self.weights_packs,percentage=True)
+        else:
+            return
+        cyphered_packs     = cypher_packs(self, packed_parameters, mask)
         he_parameters      = pickle.dumps(cyphered_packs)
         model_size         = get_size(cyphered_packs)
     
@@ -239,7 +244,7 @@ def fit_fedphe(self, parameters, config):
     
     write_train_logs(self, config['round'], loss, acc, model_size, train_time, cypher_time, decypher_time)
     
-    fit_msg = self.create_fit_msg(train_time, acc, loss, model_size, he_parameters, topk_mask)
+    fit_msg = self.create_fit_msg(train_time, acc, loss, model_size, he_parameters, mask)
     
     return fit_msg
 
