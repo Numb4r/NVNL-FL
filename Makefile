@@ -1,11 +1,11 @@
 PYTHON := python3.10
 
 configure:
-	docker build -t fl_server server/.
-	docker build -t fl_client client/.
+	docker build -t flhe:server server/.
+	docker build -t flhe:client client/.
 
 run:
-	$(PYTHON) generate_log_setup.py && docker compose -f teste-mnist-2.yaml up
+	docker compose -f FedPHE-FASHIONMNIST-10.yaml up
 
 graph:
 	$(PYTHON) generate_graphs.py 
