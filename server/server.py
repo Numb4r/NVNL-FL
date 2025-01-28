@@ -64,11 +64,6 @@ class HEServer(fl.server.strategy.FedAvg):
             self.homomorphic_type = 'CKKS'
             self.onlysum          = False
             self.packing          = True
-        elif str(self.solution).lower() == 'yphe':
-            self.homomorphic      = True
-            self.homomorphic_type = 'CKKS'
-            self.onlysum          = False
-            self.packing          = True
             
         elif str(self.solution).lower() == 'plaintext':
             self.homomorphic      = False
