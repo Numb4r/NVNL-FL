@@ -115,7 +115,6 @@ Instituto de Computação - Universidade Estadual de Campinas
 ---
 
 ## 🤝  Agradecimentos
-I'd like to express my gratitude to the following projects and contributors for their work and contributions, which have been invaluable to this project:
 
 Expresso minha gratidão aos seguintes projetos e seus contribuintes pelos seus trabalhos e contribuições acadêmicas:
 
