@@ -2,3 +2,6 @@
 client/TenSEAL/
 client/tenseal.tar
 client/rasp_cli.tar
+.csv
+__pycache__
+*.pyc

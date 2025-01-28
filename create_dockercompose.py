@@ -5,7 +5,7 @@ import random
 
 def add_server_info(clients, rounds, solution, dataset, frac_fit, alpha):
     server_str = f"  server:\n\
-    image: 'allanmsouza/flhe:server'\n\
+    image: 'flhe:server'\n\
     container_name: fl_server\n\
     environment:\n\
       - SERVER_IP=0.0.0.0:9999\n\
@@ -33,7 +33,7 @@ def add_server_info(clients, rounds, solution, dataset, frac_fit, alpha):
 def add_client_info(cid, nclients, solution, dataset, niid, alpha,
                     start2share,percentage,technique):
     client_str = f"  client-{cid}:\n\
-    image: 'allanmsouza/flhe:client'\n\
+    image: 'flhe:client'\n\
     environment:\n\
       - SERVER_IP=fl_server:9999\n\
       - CID={cid}\n\
