@@ -7,7 +7,7 @@ import math
 
 from models import flat_parameters, reshape_parameters
 from client_logs import write_train_logs, write_evaluate_logs
-from client_utils import get_size, packing, cypher_packs, get_topk_mask, decypher_packs, flat_packs, remove_padding,get_pondering_random_mask,get_robin_round_mask,get_slice_window_mask
+from client_utils import get_size, packing, cypher_packs, get_topk_mask, decypher_packs, flat_packs, remove_padding,get_pondering_random_mask,get_robin_round_mask,get_slide_window_mask
 
 from encryption.quantize import quantize, unquantize, batch_padding, unbatching_padding
 
@@ -229,7 +229,7 @@ def fit_fedphe(self, parameters, config):
             mask          = get_robin_round_mask(round=config['round'],packs=packed_parameters,size_window=self.percentage,percentage=True)
 
         elif self.technique == "slided_window":
-            mask          = get_slice_window_mask(round=config['round'],packs=packed_parameters,size_window=self.percentage,stride=0.5,percentage=True)
+            mask          = get_slide_window_mask(round=config['round'],packs=packed_parameters,size_window=self.percentage,stride=0.5,percentage=True)
         elif self.technique == "weight_random":
             if len(self.weights_packs ) == 0 :
                 self.weights_packs = np.ones(len(packed_parameters))

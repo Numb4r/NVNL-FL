@@ -64,7 +64,7 @@ def get_topk_mask(packs, percentage):
             res_mask[i] = 1
             
     return res_mask
-def get_slice_window_mask(round,packs,size_window=0.1,stride=3,percentage=False):
+def get_slide_window_mask(round,packs,size_window=0.1,stride=3,percentage=False):
     if percentage:
         size_window = math.ceil(len(packs) * size_window)
         stride = math.ceil(size_window*stride)
@@ -79,7 +79,7 @@ def get_slice_window_mask(round,packs,size_window=0.1,stride=3,percentage=False)
 def get_robin_round_mask(round,packs,size_window,percentage=False):
     if percentage:
         size_window = math.ceil(len(packs) * size_window)
-    return get_slice_window_mask(round,packs,size_window,size_window)
+    return get_slide_window_mask(round,packs,size_window,size_window)
 def get_pondering_random_mask(packs,k,weights_packs,penalty=0.5,reward=0.1,percentage=False):
 
     n = len(packs)
