@@ -144,6 +144,21 @@ Expresso minha gratidão aos seguintes projetos e seus contribuintes pelos seus 
 - [FLASHE](https://github.com/SamuelGong/FLASHE) - pela sua contribuição tecnicas de otimização de esparcificação de pacotes.
 
 
+## 💬 Citação
+```bibtex
+@inproceedings{nvnl_fl,
+ author = {Yuri D. Faria and Luiz F. Bittencourt and Leandro A. Villas and Allan M. de Souza},
+ title = {O Que Não é Visto, Não é Lembrado: Aprendizado Federado Eficiente com Criptografia Homomórfica},
+ booktitle = {Anais do XLIII Simpósio Brasileiro de Redes de Computadores e Sistemas Distribuídos},
+ location = {Natal/RN},
+ year = {2025},
+ keywords = {},
+ issn = {2177-9384},
+ pages = {1--14},
+ publisher = {SBC},
+ address = {Porto Alegre, RS, Brasil},
+}
+```
 
 
 
